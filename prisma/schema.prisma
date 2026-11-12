@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  phone        String?  @unique
+  studentCode  String?  @unique
+  name         String
+  role         String   @default("TEACHER") // ADMIN | TEACHER | STUDENT_PARENT
+  passwordHash String
+  avatar       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  taughtClasses   ClassRoom[]        @relation("TeacherClasses")
+  enrollments     Enrollment[]       @relation("StudentEnrollments")
+  reportedIssues  TuitionIssue[]     @relation("IssueReporter")
+  studentIssues   TuitionIssue[]     @relation("IssueStudent")
+  markedRecords   AttendanceRecord[] @relation("MarkedByUser")
+  studentRecords  AttendanceRecord[] @relation("StudentAttendance")
+}
+
+model ClassRoom {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  level             String
+  scheduleText      String
+  type              String   @default("MONTHLY") // "MONTHLY" (8 buổi/tháng) | "COURSE" (trọn khóa IELTS)
+  sessionsPerMonth  Int      @default(8)
+  monthlyTuition    Int      @default(1000000)
+  pricePerSession   Int      @default(125000)
+  room              String?
+  status            String   @default("ACTIVE")
+  teacherId         String
+  teacher           User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  enrollments       Enrollment[]
+  sessions          ClassSession[]
+  tuitionIssues     TuitionIssue[]
+}
+
+model Enrollment {
+  id                String   @id @default(cuid())
+  classId           String
+  studentId         String
+  joinDate          DateTime
+  billingMode       String   @default("MONTHLY") // MONTHLY | COURSE
+  customMonthlyFee  Int?
+  status            String   @default("ACTIVE") // ACTIVE | PAUSED | DROPPED
+  note              String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  classRoom         ClassRoom       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student           User            @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
+  tuitionCycles     TuitionCycle[]
+  payments          PaymentRecord[]
+
+  @@unique([classId, studentId])
+}
+
+model ClassSession {
+  id          String   @id @default(cuid())
+  classId     String
+  sessionDate DateTime
+  title       String
+  topic       String?
+  teacherNote String?
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classRoom   ClassRoom          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendances AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id            String   @id @default(cuid())
+  sessionId     String
+  studentId     String
+  status        String   @default("PRESENT") // PRESENT | LATE | ABSENT | EXCUSED
+  note          String?
+  homeworkDone  Boolean  @default(true)
+  markedById    String?
+  markedAt      DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  session       ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student       User         @relation("StudentAttendance", fields: [studentId], references: [id], onDelete: Cascade)
+  markedBy      User?        @relation("MarkedByUser", fields: [markedById], references: [id])
+
+  @@unique([sessionId, studentId])
+}
+
+model TuitionCycle {
+  id               String    @id @default(cuid())
+  enrollmentId     String
+  cycleName        String
+  periodStart      DateTime
+  periodEnd        DateTime
+  dueDate          DateTime
+  expectedSessions Int       @default(8)
+  totalAmount      Int
+  discountAmount   Int       @default(0)
+  paidAmount       Int       @default(0)
+  status           String    @default("UNPAID")
+  paymentMethod    String?
+  paidAt           DateTime?
+  note             String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  enrollment       Enrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  issues           TuitionIssue[]
+  payments         PaymentRecord[]
+}
+
+model PaymentRecord {
+  id             String        @id @default(cuid())
+  enrollmentId   String
+  tuitionCycleId String?
+  amount         Int
+  paymentMethod  String        @default("TRANSFER") // "TRANSFER" (Chuyển khoản) | "CASH" (Tiền mặt)
+  paidAt         DateTime      @default(now())
+  note           String?
+  createdAt      DateTime      @default(now())
+
+  enrollment     Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  tuitionCycle   TuitionCycle? @relation(fields: [tuitionCycleId], references: [id], onDelete: SetNull)
+}
+
+model TuitionIssue {
+  id                  String    @id @default(cuid())
+  studentId           String
+  classId             String
+  tuitionCycleId      String?
+  reportedById        String
+  category            String    @default("LATE_PAYMENT")
+  priority            String    @default("MEDIUM")
+  status              String    @default("OPEN")
+  title               String
+  description         String
+  promisedPaymentDate DateTime?
+  resolutionNote      String?
+  resolvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  student             User          @relation("IssueStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  classRoom           ClassRoom     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  tuitionCycle        TuitionCycle? @relation(fields: [tuitionCycleId], references: [id], onDelete: SetNull)
+  reportedBy          User          @relation("IssueReporter", fields: [reportedById], references: [id])
+}
