@@ -59,10 +59,23 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     ).length;
     const excused = studentAtt.filter((a) => a.status === "EXCUSED").length;
 
-    const usedSessions = attended + absentUnexcused;
+    // TÍNH SỐ BUỔI ĐÃ QUA THEO LỊCH CỦA LỚP (SCHEDULE TIMELINE):
+    // Chi phí tổ chức lớp học phát sinh theo lịch. Bất kể giáo viên có quên điểm danh hay học sinh nghỉ ốm,
+    // buổi học theo lịch vẫn bị tính trừ vào học phí (trừ trường hợp nghỉ có phép EXCUSED được duyệt bảo lưu).
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const joinDateStr = new Date(e.joinDate).toISOString().slice(0, 10);
+    const pastScheduledSessions = cls.sessions.filter((s) => {
+      const sDate = new Date(s.sessionDate).toISOString().slice(0, 10);
+      return sDate <= todayStr && sDate >= joinDateStr;
+    });
+    const scheduledPassed = Math.max(0, pastScheduledSessions.length - excused);
+
+    // Số buổi đã sử dụng = max giữa buổi điểm danh thực tế và số buổi đã diễn ra theo lịch
+    const usedSessions = Math.max(attended + absentUnexcused, scheduledPassed);
     const targetSessions =
       paidSessions > 0 ? paidSessions : totalExpectedSessions || 8;
     const remainingSessions = targetSessions - usedSessions;
+    const scheduledSessionsCount = pastScheduledSessions.length;
 
     const paymentHistory =
       e.payments.length > 0
@@ -109,6 +122,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       targetSessions,
       paidSessions,
       remainingSessions,
+      scheduledSessionsCount,
       tuition: latestCycle
         ? {
             cycleId: latestCycle.id,

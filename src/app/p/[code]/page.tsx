@@ -165,6 +165,17 @@ export default function ParentPortalPage() {
             )}
           </div>
 
+          {attendance.remainingSessions <= 2 && (
+            <div className="p-3 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-xs font-bold text-amber-200 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>
+                {attendance.remainingSessions <= 0
+                  ? `Học viên đã dùng hết ${attendance.targetSessions} buổi học theo lịch của kỳ này. Kính mời Quý phụ huynh nạp học phí kỳ mới để tiếp tục lịch học.`
+                  : `Học viên còn ${attendance.remainingSessions} buổi học theo lịch. Kính mời Quý phụ huynh chuẩn bị đóng học phí cho chu kỳ tiếp theo.`}
+              </span>
+            </div>
+          )}
+
           <div>
             <span className="text-xs text-slate-300 block">Số tiền thanh toán:</span>
             <div className="text-3xl font-black text-white mt-1">

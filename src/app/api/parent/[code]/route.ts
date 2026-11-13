@@ -88,7 +88,16 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const excusedCount = attendanceTimeline.filter((a) => a.status === "EXCUSED").length;
   const absentCount = attendanceTimeline.filter((a) => a.status === "ABSENT").length;
   const attendedTotal = presentCount + lateCount;
-  const usedSessions = attendedTotal + absentCount; // Đã dùng = Đi học + Vắng không phép
+
+  // Tính số buổi đã qua theo lịch của lớp:
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const joinDateStr = new Date(enr.joinDate).toISOString().slice(0, 10);
+  const pastScheduledSessions = cls.sessions.filter((s) => {
+    const sDate = new Date(s.sessionDate).toISOString().slice(0, 10);
+    return sDate <= todayStr && sDate >= joinDateStr;
+  });
+  const scheduledPassed = Math.max(0, pastScheduledSessions.length - excusedCount);
+  const usedSessions = Math.max(attendedTotal + absentCount, scheduledPassed);
 
   const totalRequired = cycles.reduce(
     (sum, cy) => sum + Math.max(0, cy.totalAmount - cy.discountAmount),

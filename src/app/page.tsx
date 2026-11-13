@@ -1040,7 +1040,7 @@ function ClassView({
   const [dossierStudentId, setDossierStudentId] = useState<string | null>(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "PAUSED" | "FINISHED" | "ALL">("ACTIVE");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "PAUSED" | "FINISHED" | "ALL" | "EXPIRING">("ACTIVE");
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -1341,8 +1341,23 @@ Trân trọng cảm ơn Quý phụ huynh!`;
 
   const handleCopyParentLink = (s: Student) => {
     const code = s.studentCode || s.phone || s.studentId;
-    const parentUrl = `${typeof window !== "undefined" ? window.location.origin : "http://danielts.nextband.vn"}/p/${encodeURIComponent(code)}`;
-    const msg = `Kính gửi Quý phụ huynh em ${s.name},\nDanielTS xin gửi link tra cứu sổ điểm danh và thanh toán học phí trực tuyến (quét mã VietQR tự động):\n👉 ${parentUrl}\nTrân trọng cảm ơn Quý phụ huynh!`;
+    const parentUrl = `${typeof window !== "undefined" ? window.location.origin : "https://danielts.nextband.vn"}/p/${encodeURIComponent(code)}`;
+    const sessionNotice =
+      s.remainingSessions <= 0
+        ? `⚠️ Lưu ý: Em đã qua hết ${s.usedSessions}/${s.targetSessions} buổi học theo lịch của kỳ này. Kính mời Quý phụ huynh nộp học phí kỳ mới để trung tâm tiếp tục xếp lịch học cho con.`
+        : s.remainingSessions <= 2
+        ? `ℹ️ Thông báo: Em còn ${s.remainingSessions} buổi học theo lịch trong chu kỳ này (${s.usedSessions}/${s.targetSessions} buổi đã qua). Kính mời Quý phụ huynh chuẩn bị nộp học phí cho kỳ tiếp theo.`
+        : `📊 Tiến độ buổi học theo lịch: ${s.usedSessions}/${s.targetSessions} buổi (Còn lại: ${s.remainingSessions} buổi).`;
+
+    const msg = `Kính gửi Quý phụ huynh em ${s.name},
+Trung tâm Anh ngữ DanielTS xin gửi Sổ liên lạc trực tuyến và tình trạng học phí của học viên:
+
+${sessionNotice}
+
+👉 Phụ huynh bấm vào link bên dưới để xem chi tiết lịch sử học tập & quét mã VietQR tự động:
+${parentUrl}
+
+Trân trọng cảm ơn Quý phụ huynh!`;
     navigator.clipboard.writeText(msg);
     notify(`Đã sao chép link tra cứu & tin nhắn Zalo cho phụ huynh em ${s.name}!`);
   };
@@ -1832,6 +1847,29 @@ Trân trọng cảm ơn Quý phụ huynh!`;
           </button>
           <button
             type="button"
+            onClick={() => setStatusFilter("EXPIRING")}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
+              statusFilter === "EXPIRING"
+                ? "bg-amber-500 text-white shadow-sm font-extrabold"
+                : "text-amber-800 hover:bg-amber-100 font-bold"
+            }`}
+            title="Học viên còn lại ≤ 2 buổi học theo lịch — Cần thông báo thu học phí"
+          >
+            <span>⚠️ Sắp hết phí (≤ 2 buổi)</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              statusFilter === "EXPIRING" ? "bg-amber-700/50 text-white" : "bg-amber-200 text-amber-900"
+            }`}>
+              {detail.students.filter(
+                (s) =>
+                  (s.status || "ACTIVE") === "ACTIVE" &&
+                  isMonthly &&
+                  s.paidSessions > 0 &&
+                  s.remainingSessions <= 2
+              ).length}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => setStatusFilter("PAUSED")}
             className={`px-3 py-1.5 rounded-xl transition ${
               statusFilter === "PAUSED"
@@ -1879,21 +1917,21 @@ Trân trọng cảm ơn Quý phụ huynh!`;
           .filter((s) => {
             const st = s.status || "ACTIVE";
             if (statusFilter === "ALL") return true;
+            if (statusFilter === "EXPIRING") {
+              return st === "ACTIVE" && isMonthly && s.paidSessions > 0 && s.remainingSessions <= 2;
+            }
             return st === statusFilter;
           })
           .map((s) => {
           const debt = s.tuition?.debt || 0;
-          const overSessions =
-            isMonthly && s.paidSessions > 0 && s.usedSessions > s.paidSessions
-              ? s.usedSessions - s.paidSessions
-              : 0;
           const noPaidYet = !s.tuition || s.tuition.paid === 0;
-          const isLastSession =
+          const isExpiredOrOver =
+            isMonthly && s.paidSessions > 0 && s.remainingSessions <= 0;
+          const isExpiringSoon =
             isMonthly &&
             s.paidSessions > 0 &&
-            s.remainingSessions >= 0 &&
-            s.remainingSessions <= 1 &&
-            debt === 0;
+            s.remainingSessions > 0 &&
+            s.remainingSessions <= 2;
 
           return (
             <div
@@ -1903,10 +1941,10 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                   ? "border-amber-200/80 bg-amber-50/20"
                   : s.status === "FINISHED"
                   ? "border-slate-200 opacity-60 bg-slate-50/40"
-                  : debt > 0 || overSessions > 0 || noPaidYet
-                  ? "border-rose-200 hover:border-rose-300"
-                  : isLastSession
-                  ? "border-amber-200 hover:border-amber-300"
+                  : debt > 0 || isExpiredOrOver || noPaidYet
+                  ? "border-rose-300 bg-rose-50/15 hover:border-rose-400"
+                  : isExpiringSoon
+                  ? "border-amber-300 bg-amber-50/25 hover:border-amber-400"
                   : "border-slate-200/80 hover:border-indigo-200"
               }`}
             >
@@ -2014,7 +2052,7 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                   {isMonthly ? (
                     <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span>
-                        Đã học: <strong className="text-slate-900">{s.usedSessions}/{s.targetSessions} buổi</strong>
+                        Đã qua theo lịch: <strong className="text-slate-900">{s.usedSessions}/{s.targetSessions} buổi</strong>
                       </span>
                       <span className="text-slate-300">·</span>
                       <span>Đi học: <strong>{s.attended}</strong></span>
@@ -2024,6 +2062,20 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                       {s.excused > 0 && (
                         <span className="text-sky-700 font-bold">· Có phép: {s.excused}</span>
                       )}
+                      <span className="text-slate-300">·</span>
+                      <span className={`px-2 py-0.5 rounded-md font-extrabold ${
+                        s.remainingSessions <= 0
+                          ? "bg-rose-100 text-rose-800 border border-rose-200"
+                          : s.remainingSessions <= 2
+                          ? "bg-amber-100 text-amber-900 border border-amber-200"
+                          : "text-emerald-700 bg-emerald-50"
+                      }`}>
+                        {s.remainingSessions > 0
+                          ? `Còn ${s.remainingSessions} buổi`
+                          : s.remainingSessions === 0
+                          ? `Hết buổi (0 buổi)`
+                          : `Lố ${Math.abs(s.remainingSessions)} buổi`}
+                      </span>
                     </div>
                   ) : (
                     <div className="text-xs text-slate-600">
@@ -2034,13 +2086,15 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                   {/* TRẠNG THÁI HỌC PHÍ (HỖ TRỢ PRIVACY MODE) */}
                   {s.tuition ? (
                     <div className="pt-0.5">
-                      {overSessions > 0 ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
-                          <AlertCircle className="w-3.5 h-3.5" />
+                      {isExpiredOrOver ? (
+                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-300 text-xs font-black text-rose-800 shadow-xs">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
                           {privacyMode ? (
-                            <span>Học quá {overSessions} buổi — Cần thu phí kỳ mới</span>
+                            <span>Đã hết số buổi đóng phí theo lịch — Cần thu kỳ mới</span>
+                          ) : s.remainingSessions === 0 ? (
+                            <span>🚨 Đã dùng hết {s.targetSessions} buổi đã nộp — Cần thu học phí kỳ mới ({vnd(detail.class.monthlyTuition)})</span>
                           ) : (
-                            <span>Học quá {overSessions} buổi — Cần thu {vnd(detail.class.monthlyTuition)}</span>
+                            <span>🚨 Học lố {Math.abs(s.remainingSessions)} buổi theo lịch — Cần thu học phí kỳ mới ({vnd(detail.class.monthlyTuition)})</span>
                           )}
                         </div>
                       ) : debt > 0 ? (
@@ -2055,12 +2109,12 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                             <span className="text-[11px] font-normal text-rose-600">· Hạn: {fmtDate(s.tuition.dueDate)}</span>
                           )}
                         </div>
-                      ) : isLastSession ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">
-                          <Clock className="w-3.5 h-3.5" />
-                          {s.remainingSessions === 0
-                            ? "Đã học đủ số buổi — Nhắc nộp tháng mới"
-                            : "Còn 1 buổi cuối — Nhắc chuẩn bị nộp phí"}
+                      ) : isExpiringSoon ? (
+                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-300 text-xs font-extrabold text-amber-900 shadow-xs">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>
+                            ⚠️ Sắp hết kỳ phí: Còn {s.remainingSessions} buổi theo lịch — Cần gửi phiếu nhắc PH nộp tháng sau
+                          </span>
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60">
