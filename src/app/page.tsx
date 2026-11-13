@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { generateFixedSessions, parseScheduleDays, NUMBER_TO_SHORT_NAME } from "@/lib/schedule";
+import { generateFixedSessions, parseScheduleDays, NUMBER_TO_SHORT_NAME, NUMBER_TO_DAY_NAME } from "@/lib/schedule";
 import {
   Users,
   GraduationCap,
@@ -216,6 +216,8 @@ export default function Page() {
   const [viewMode, setViewMode] = useState<"CLASSES" | "STATS">("CLASSES");
   const [showAddClass, setShowAddClass] = useState(false);
   const [toast, setToast] = useState("");
+  const [classFilter, setClassFilter] = useState<"ALL" | "TODAY" | "NEEDS_COLLECTION" | "ACTIVE" | "EMPTY">("ALL");
+  const [searchClassQuery, setSearchClassQuery] = useState("");
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -247,6 +249,40 @@ export default function Page() {
       notify(err.message);
     }
   };
+
+  const todayDayOfWeek = new Date().getDay();
+  const todayName = NUMBER_TO_DAY_NAME[todayDayOfWeek] || "Hôm nay";
+
+  const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount || 0), 0);
+  const totalOwing = classes.reduce((sum, c) => sum + (c.owingCount || 0), 0);
+  const activeClasses = classes.filter((c) => (c.studentCount || 0) > 0);
+  const todayClasses = classes.filter((c) =>
+    parseScheduleDays(c.scheduleText).includes(todayDayOfWeek)
+  );
+  const classesNeedingCollection = classes.filter((c) => (c.owingCount || 0) > 0);
+
+  const filteredClasses = classes.filter((c) => {
+    if (searchClassQuery.trim()) {
+      const q = searchClassQuery.toLowerCase().trim();
+      const matchName = c.name.toLowerCase().includes(q);
+      const matchSchedule = (c.scheduleText || "").toLowerCase().includes(q);
+      if (!matchName && !matchSchedule) return false;
+    }
+
+    if (classFilter === "TODAY") {
+      return parseScheduleDays(c.scheduleText).includes(todayDayOfWeek);
+    }
+    if (classFilter === "NEEDS_COLLECTION") {
+      return (c.owingCount || 0) > 0;
+    }
+    if (classFilter === "ACTIVE") {
+      return (c.studentCount || 0) > 0;
+    }
+    if (classFilter === "EMPTY") {
+      return (c.studentCount || 0) === 0;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800">
@@ -361,105 +397,468 @@ export default function Page() {
           <ClassView classId={openId} notify={notify} />
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                  Lớp học đang giảng dạy
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Chọn một lớp để tiến hành điểm danh buổi học hoặc ghi nhận nạp học phí
-                </p>
+            {/* TẦNG 1: EXECUTIVE KPI SUMMARY BENTO CARDS */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* CARD 1: CA HỌC HÔM NAY */}
+              <div
+                onClick={() => setClassFilter("TODAY")}
+                className={`p-4 rounded-3xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                  todayClasses.length > 0
+                    ? "bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white border-indigo-700/60 shadow-lg shadow-indigo-950/20 hover:scale-[1.02]"
+                    : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
+                      todayClasses.length > 0 ? "text-indigo-300" : "text-slate-500"
+                    }`}
+                  >
+                    <CalendarDays className="w-3.5 h-3.5" /> Ca Học Hôm Nay
+                  </span>
+                  {todayClasses.length > 0 && (
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="my-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className={`text-2xl sm:text-3xl font-black ${
+                        todayClasses.length > 0 ? "text-white" : "text-slate-900"
+                      }`}
+                    >
+                      {todayClasses.length}
+                    </span>
+                    <span
+                      className={`text-xs font-bold ${
+                        todayClasses.length > 0 ? "text-indigo-200" : "text-slate-500"
+                      }`}
+                    >
+                      ca học ({todayName})
+                    </span>
+                  </div>
+                  <p
+                    className={`text-[11px] mt-0.5 truncate ${
+                      todayClasses.length > 0 ? "text-indigo-200/80" : "text-slate-400"
+                    }`}
+                  >
+                    {todayClasses.length > 0
+                      ? "Bấm để lọc ca học cần điểm danh"
+                      : "Hôm nay không có ca học theo lịch"}
+                  </p>
+                </div>
+
+                <div
+                  className={`pt-2 border-t text-[11px] font-bold flex items-center justify-between ${
+                    todayClasses.length > 0
+                      ? "border-indigo-800/80 text-emerald-400"
+                      : "border-slate-100 text-indigo-600"
+                  }`}
+                >
+                  <span>{todayClasses.length > 0 ? "⚡ Điểm danh ca học" : "Xem tất cả lớp"}</span>
+                  <span>→</span>
+                </div>
               </div>
-              <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-sm">
-                Tổng cộng: <strong className="text-slate-900">{classes.length}</strong> lớp
-              </span>
+
+              {/* CARD 2: TỔNG SĨ SỐ HỌC VIÊN */}
+              <div
+                onClick={() => setClassFilter("ACTIVE")}
+                className="p-4 rounded-3xl bg-white border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-600" /> Sĩ Số Đang Học
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
+                    {activeClasses.length} lớp
+                  </span>
+                </div>
+                <div className="my-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-black text-slate-900">
+                      {totalStudents}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">học viên</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Đang theo học tại trung tâm
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-100 text-[11px] font-bold text-indigo-600 flex items-center justify-between">
+                  <span>Xem lớp có học viên</span>
+                  <span>→</span>
+                </div>
+              </div>
+
+              {/* CARD 3: CẢNH BÁO THU HỌC PHÍ */}
+              <div
+                onClick={() => setClassFilter("NEEDS_COLLECTION")}
+                className={`p-4 rounded-3xl border transition-all cursor-pointer flex flex-col justify-between shadow-sm ${
+                  totalOwing > 0
+                    ? "bg-amber-50/40 border-amber-300/80 hover:border-amber-400 hover:bg-amber-50/70"
+                    : "bg-white border-slate-200/80 hover:border-emerald-300"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
+                      totalOwing > 0 ? "text-amber-900" : "text-slate-500"
+                    }`}
+                  >
+                    <AlertCircle
+                      className={`w-3.5 h-3.5 ${
+                        totalOwing > 0 ? "text-amber-600" : "text-emerald-600"
+                      }`}
+                    />
+                    Thu Học Phí
+                  </span>
+                  {totalOwing > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black border border-rose-200">
+                      Cần thu ngay
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      Hoàn tất 100%
+                    </span>
+                  )}
+                </div>
+                <div className="my-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className={`text-2xl sm:text-3xl font-black ${
+                        totalOwing > 0 ? "text-rose-700" : "text-emerald-700"
+                      }`}
+                    >
+                      {totalOwing}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600">em cần thu</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {totalOwing > 0
+                      ? `Tại ${classesNeedingCollection.length} lớp (nợ hoặc sắp hết phí)`
+                      : "Tất cả học viên đã nạp đủ học phí"}
+                  </p>
+                </div>
+                <div
+                  className={`pt-2 border-t text-[11px] font-bold flex items-center justify-between ${
+                    totalOwing > 0 ? "border-amber-200 text-amber-900" : "border-slate-100 text-emerald-700"
+                  }`}
+                >
+                  <span>{totalOwing > 0 ? "⚠️ Lọc học viên cần thu" : "Tài chính ổn định"}</span>
+                  <span>→</span>
+                </div>
+              </div>
+
+              {/* CARD 4: QUẢN LÝ LỚP HỌC */}
+              <div
+                onClick={() => setClassFilter("ALL")}
+                className="p-4 rounded-3xl bg-white border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-slate-600" /> Quy Mô Lớp Học
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                </div>
+                <div className="my-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-black text-slate-900">
+                      {classes.length}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">lớp học</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {classes.filter((c) => c.type === "MONTHLY").length} lớp tháng · {classes.filter((c) => c.type === "COURSE").length} khóa IELTS
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-100 text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span>Tất cả chương trình</span>
+                  <span>→</span>
+                </div>
+              </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {classes.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => setOpenId(c.id)}
-                  className="group relative cursor-pointer bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-300 card-hover-effect flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase ${
-                          c.type === "COURSE"
-                            ? "bg-purple-50 text-purple-700 border border-purple-200/80"
-                            : "bg-blue-50 text-blue-700 border border-blue-200/80"
-                        }`}
-                      >
-                        {c.type === "COURSE" ? (
-                          <>
-                            <GraduationCap className="w-3 h-3" /> Trọn Khóa IELTS
-                          </>
-                        ) : (
-                          <>
-                            <CalendarDays className="w-3 h-3" /> Theo Tháng (8 Buổi)
-                          </>
-                        )}
-                      </span>
+            {/* TẦNG 2: TOOLBAR PHÂN LOẠI & TÌM KIẾM THÔNG MINH */}
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* TABS LỌC PHÂN CẤP */}
+                <div className="flex flex-wrap items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/70 text-xs font-bold gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setClassFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-xl transition ${
+                      classFilter === "ALL"
+                        ? "bg-white text-indigo-700 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Tất cả ({classes.length})
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteClass(e, c)}
-                        title="Xóa lớp này"
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <h3 className="font-extrabold text-slate-900 text-base mt-2.5 group-hover:text-indigo-600 transition-colors">
-                      {c.name}
-                    </h3>
-
-                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>{c.scheduleText || "Chưa thiết lập thời gian học"}</span>
-                    </div>
-
-                    <div className="mt-3.5 p-3 rounded-2xl bg-slate-50/80 border border-slate-100 text-xs">
-                      <span className="text-slate-500 block text-[11px]">Học phí tiêu chuẩn</span>
-                      <span className="font-extrabold text-indigo-700 text-sm">
-                        {vnd(c.monthlyTuition)}
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {c.type === "MONTHLY"
-                          ? ` (lẻ ${vnd(c.pricePerSession)}/buổi)`
-                          : " /trọn khóa"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100 text-xs">
-                    <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-slate-400" />
-                      {c.studentCount} học viên
+                  <button
+                    type="button"
+                    onClick={() => setClassFilter("TODAY")}
+                    className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
+                      classFilter === "TODAY"
+                        ? "bg-indigo-600 text-white shadow-sm font-extrabold"
+                        : "text-indigo-700 hover:bg-indigo-50 font-bold"
+                    }`}
+                  >
+                    <span>⚡ Ca học hôm nay</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        classFilter === "TODAY" ? "bg-indigo-800 text-white" : "bg-indigo-100 text-indigo-800"
+                      }`}
+                    >
+                      {todayClasses.length}
                     </span>
+                  </button>
 
-                    {c.owingCount > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-200 text-[11px]">
-                        <AlertCircle className="w-3 h-3" /> {c.owingCount} cần thu
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-[11px]">
-                        <Check className="w-3 h-3" /> Đã đóng đủ
-                      </span>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setClassFilter("NEEDS_COLLECTION")}
+                    className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 ${
+                      classFilter === "NEEDS_COLLECTION"
+                        ? "bg-amber-500 text-white shadow-sm font-extrabold"
+                        : "text-amber-800 hover:bg-amber-100 font-bold"
+                    }`}
+                  >
+                    <span>🚨 Cần thu phí</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                        classFilter === "NEEDS_COLLECTION" ? "bg-amber-700 text-white" : "bg-amber-200 text-amber-900"
+                      }`}
+                    >
+                      {classesNeedingCollection.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setClassFilter("ACTIVE")}
+                    className={`px-3 py-1.5 rounded-xl transition ${
+                      classFilter === "ACTIVE"
+                        ? "bg-white text-indigo-700 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Có học viên ({activeClasses.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setClassFilter("EMPTY")}
+                    className={`px-3 py-1.5 rounded-xl transition ${
+                      classFilter === "EMPTY"
+                        ? "bg-white text-indigo-700 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Lớp trống ({classes.length - activeClasses.length})
+                  </button>
                 </div>
-              ))}
 
-              {classes.length === 0 && (
-                <div className="sm:col-span-2 lg:col-span-3 text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
+                {/* SEARCH INPUT */}
+                <div className="relative min-w-[240px] flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchClassQuery}
+                    onChange={(e) => setSearchClassQuery(e.target.value)}
+                    placeholder="Tìm theo tên lớp, ca học (T2, T4, T6)..."
+                    className="w-full pl-9 pr-7 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 font-medium text-slate-800 placeholder-slate-400"
+                  />
+                  {searchClassQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchClassQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* TẦNG 3: DANH SÁCH THẺ LỚP HỌC ĐƯỢC PHÂN CẤP RÕ RỆT */}
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredClasses.map((c) => {
+                const isTodayClass = parseScheduleDays(c.scheduleText).includes(todayDayOfWeek);
+                const hasStudents = (c.studentCount || 0) > 0;
+                const hasOwing = (c.owingCount || 0) > 0;
+
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => setOpenId(c.id)}
+                    className={`group relative cursor-pointer rounded-3xl border p-5 transition-all duration-200 flex flex-col justify-between ${
+                      isTodayClass
+                        ? "bg-white border-indigo-400 ring-2 ring-indigo-500/15 shadow-lg shadow-indigo-500/5 hover:border-indigo-500"
+                        : hasOwing
+                        ? "bg-gradient-to-b from-amber-50/20 via-white to-white border-amber-300 hover:border-amber-400 shadow-sm"
+                        : hasStudents
+                        ? "bg-white border-slate-200/90 hover:border-indigo-300 shadow-sm"
+                        : "bg-slate-50/50 border-dashed border-slate-300/80 hover:border-slate-400 opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    <div>
+                      {/* BANNER ĐỈNH THẺ PHÂN CẤP TRẠNG THÁI */}
+                      {isTodayClass ? (
+                        <div className="mb-3.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[11px] font-extrabold flex items-center justify-between shadow-xs">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            ⚡ HÔM NAY CÓ CA HỌC
+                          </span>
+                          <span className="text-[10px] opacity-90">{todayName}</span>
+                        </div>
+                      ) : hasOwing ? (
+                        <div className="mb-3.5 px-3 py-1 rounded-xl bg-amber-100/80 border border-amber-300 text-amber-900 text-[11px] font-extrabold flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                            CẦN THU HỌC PHÍ
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 text-[10px]">
+                            {c.owingCount} em
+                          </span>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase ${
+                            c.type === "COURSE"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200/80"
+                              : "bg-blue-50 text-blue-700 border border-blue-200/80"
+                          }`}
+                        >
+                          {c.type === "COURSE" ? (
+                            <>
+                              <GraduationCap className="w-3 h-3" /> Trọn Khóa IELTS
+                            </>
+                          ) : (
+                            <>
+                              <CalendarDays className="w-3 h-3" /> Theo Tháng (8 Buổi)
+                            </>
+                          )}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteClass(e, c)}
+                          title="Xóa lớp này"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <h3 className="font-black text-slate-900 text-lg mt-2.5 group-hover:text-indigo-600 transition-colors leading-snug">
+                        {c.name}
+                      </h3>
+
+                      <div className="text-xs text-slate-600 mt-1.5 flex items-center gap-1.5 font-medium">
+                        <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span>{c.scheduleText || "Chưa thiết lập thời gian học"}</span>
+                      </div>
+
+                      {/* KHỐI HỌC PHÍ TIÊU CHUẨN */}
+                      <div className="mt-3.5 p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">
+                            Học phí tiêu chuẩn
+                          </span>
+                          <span className="font-black text-indigo-700 text-base">
+                            {vnd(c.monthlyTuition)}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-semibold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                          {c.type === "MONTHLY"
+                            ? `${vnd(c.pricePerSession)}/buổi`
+                            : "Trọn khóa"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-4 mt-4 border-t border-slate-100">
+                      {/* SĨ SỐ & CẢNH BÁO TÀI CHÍNH */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-indigo-600" />
+                          {c.studentCount} học viên
+                        </span>
+
+                        {c.owingCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 font-extrabold border border-rose-200 text-[11px]">
+                            <AlertCircle className="w-3 h-3 text-rose-600" /> {c.owingCount} cần thu
+                          </span>
+                        ) : c.studentCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-[11px]">
+                            <Check className="w-3 h-3 text-emerald-600" /> Đã đóng đủ
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium">Lớp mới</span>
+                        )}
+                      </div>
+
+                      {/* NÚT HÀNH ĐỘNG RÕ RÀNG */}
+                      {isTodayClass ? (
+                        <div className="w-full py-2.5 px-3 rounded-xl bg-indigo-600 group-hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 flex items-center justify-center gap-1.5 transition">
+                          <Zap className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Vào Điểm Danh Ca Hôm Nay</span>
+                          <span>→</span>
+                        </div>
+                      ) : hasOwing ? (
+                        <div className="w-full py-2.5 px-3 rounded-xl bg-amber-50 group-hover:bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-xs flex items-center justify-center gap-1.5 transition">
+                          <span>Quản Lý Lớp &amp; Thu Phí</span>
+                          <span>→</span>
+                        </div>
+                      ) : hasStudents ? (
+                        <div className="w-full py-2.5 px-3 rounded-xl bg-slate-50 group-hover:bg-indigo-50 group-hover:text-indigo-700 text-slate-700 border border-slate-200 group-hover:border-indigo-200 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                          <span>Vào Quản Lý Lớp Học</span>
+                          <span>→</span>
+                        </div>
+                      ) : (
+                        <div className="w-full py-2.5 px-3 rounded-xl bg-slate-100/80 group-hover:bg-slate-200 text-slate-600 border border-dashed border-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                          <span>+ Thêm Học Viên Vào Lớp</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredClasses.length === 0 && (
+                <div className="sm:col-span-2 lg:col-span-3 text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300 space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2">
                     <BookOpen className="w-6 h-6" />
                   </div>
-                  <h4 className="font-bold text-slate-800 text-sm">Chưa có lớp học nào</h4>
-                  <p className="text-xs text-slate-500 mt-1">Bấm nút Thêm lớp mới ở góc trên để bắt đầu tạo lớp học.</p>
+                  <h4 className="font-bold text-slate-800 text-sm">Không tìm thấy lớp học phù hợp</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {searchClassQuery
+                      ? `Không có lớp nào khớp với từ khóa "${searchClassQuery}". Hãy thử tìm kiếm khác.`
+                      : classFilter === "TODAY"
+                      ? "Hôm nay không có ca học nào theo lịch đã xếp."
+                      : classFilter === "NEEDS_COLLECTION"
+                      ? "Tuyệt vời! Hiện không có học viên nào bị nợ hoặc cần thu học phí."
+                      : "Chưa có lớp nào trong danh mục này."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClassFilter("ALL");
+                      setSearchClassQuery("");
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs hover:bg-indigo-100 transition mt-2"
+                  >
+                    Xem tất cả lớp học
+                  </button>
                 </div>
               )}
             </div>
