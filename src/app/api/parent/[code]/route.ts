@@ -64,6 +64,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         sessionId: s.id,
         date: s.sessionDate,
         title: s.title,
+        topic: s.topic || "",
+        teacherNote: s.teacherNote || "",
         status: rec.status, // PRESENT | LATE | EXCUSED | ABSENT
         note: rec.note || "",
         homeworkDone: rec.homeworkDone,

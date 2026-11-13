@@ -221,11 +221,23 @@ export default function ParentPortalPage() {
                 key={att.sessionId}
                 className="p-3 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 text-xs"
               >
-                <div>
+                <div className="space-y-0.5 min-w-0">
                   <span className="font-extrabold text-slate-800 block">
                     Ngày {fmtDate(att.date)} — {att.title}
                   </span>
-                  {att.note && <span className="text-slate-500 text-[11px]">💬 {att.note}</span>}
+                  {att.topic && (
+                    <span className="text-indigo-700 font-semibold text-[11px] block">
+                      📖 Bài học: {att.topic}
+                    </span>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    {att.homeworkDone !== undefined && (
+                      <span className={att.homeworkDone ? "text-emerald-700 font-bold" : "text-amber-700 font-bold"}>
+                        {att.homeworkDone ? "✓ Đã làm BTVN" : "⚠️ Chưa làm BTVN"}
+                      </span>
+                    )}
+                    {att.note && <span>💬 {att.note}</span>}
+                  </div>
                 </div>
                 <span
                   className={`px-3 py-1 rounded-xl font-bold shrink-0 text-[11px] ${

@@ -38,7 +38,9 @@ import {
   Share2,
   Copy,
   Zap,
-  RotateCcw
+  RotateCcw,
+  MessageSquare,
+  Download
 } from "lucide-react";
 
 type ClassType = "MONTHLY" | "COURSE";
@@ -1017,6 +1019,14 @@ function ClassView({
   const [showCustomDate, setShowCustomDate] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Tính năng học vụ cao cấp (Academy Suite)
+  const [homeworkMarks, setHomeworkMarks] = useState<Record<string, boolean>>({});
+  const [noteMarks, setNoteMarks] = useState<Record<string, string>>({});
+  const [topic, setTopic] = useState("");
+  const [teacherNote, setTeacherNote] = useState("");
+  const [showLessonPlan, setShowLessonPlan] = useState(false);
+  const [editingNoteFor, setEditingNoteFor] = useState<string | null>(null);
+
   // Tự động chọn buổi hôm nay hoặc buổi chưa điểm danh đầu tiên
   useEffect(() => {
     if (detail && detail.sessionHistory && detail.sessionHistory.length > 0) {
@@ -1117,14 +1127,29 @@ function ClassView({
         const r = await api<{
           saved: boolean;
           records: Record<string, string>;
+          homeworkRecords?: Record<string, boolean>;
+          noteRecords?: Record<string, string>;
+          topic?: string;
+          teacherNote?: string;
+          title?: string;
         }>(`/api/classes/${classId}/attendance?date=${date}`);
         if (cancelled) return;
         const next: Record<string, Status> = {};
+        const nextHw: Record<string, boolean> = {};
+        const nextNotes: Record<string, string> = {};
         detail.students.forEach((s) => {
           next[s.studentId] =
             (r.records[s.studentId] as Status) || "PRESENT";
+          nextHw[s.studentId] = r.homeworkRecords?.[s.studentId] ?? true;
+          if (r.noteRecords?.[s.studentId]) {
+            nextNotes[s.studentId] = r.noteRecords[s.studentId];
+          }
         });
         setMarks(next);
+        setHomeworkMarks(nextHw);
+        setNoteMarks(nextNotes);
+        setTopic(r.topic || "");
+        setTeacherNote(r.teacherNote || "");
         setSaved(r.saved);
       } catch (e: any) {
         notify(e.message);
@@ -1140,9 +1165,16 @@ function ClassView({
       setSaving(true);
       await api(`/api/classes/${classId}/attendance`, {
         method: "POST",
-        body: JSON.stringify({ date, records: marks }),
+        body: JSON.stringify({
+          date,
+          records: marks,
+          homeworkRecords: homeworkMarks,
+          noteRecords: noteMarks,
+          topic,
+          teacherNote,
+        }),
       });
-      notify(`Đã lưu điểm danh ngày ${fmtDate(date)}!`);
+      notify(`Đã lưu điểm danh & kế hoạch buổi học ngày ${fmtDate(date)}!`);
       await loadDetail();
     } catch (e: any) {
       notify(e.message);
@@ -1159,6 +1191,102 @@ function ClassView({
     });
     setMarks(next);
     notify("⚡ Đã chọn CÓ MẶT cho toàn bộ học viên!");
+  };
+
+  const handleCopyZaloReport = () => {
+    if (!detail) return;
+    const activeStudents = detail.students.filter(
+      (s) => (s.status || "ACTIVE") === "ACTIVE"
+    );
+    const presentCount = activeStudents.filter((s) =>
+      ["PRESENT", "LATE"].includes(marks[s.studentId])
+    ).length;
+    const onTimeCount = activeStudents.filter(
+      (s) => marks[s.studentId] === "PRESENT"
+    ).length;
+    const lateCount = activeStudents.filter(
+      (s) => marks[s.studentId] === "LATE"
+    ).length;
+    const excusedCount = activeStudents.filter(
+      (s) => marks[s.studentId] === "EXCUSED"
+    ).length;
+    const absentCount = activeStudents.filter(
+      (s) => marks[s.studentId] === "ABSENT"
+    ).length;
+    const hwDoneCount = activeStudents.filter(
+      (s) => homeworkMarks[s.studentId] !== false
+    ).length;
+
+    const currentSession = detail.sessionHistory.find((s) => s.date === date);
+    const sessionLabel = currentSession?.title || `Buổi học ngày ${fmtDate(date)}`;
+
+    const text = `🎓 [DANIELTS ACADEMY - BÁO CÁO BUỔI HỌC]
+📚 Lớp: ${detail.class.name} (${detail.class.scheduleText || ""})
+📅 Buổi: ${sessionLabel} (${fmtDate(date)})
+━━━━━━━━━━━━━━━━━━━━
+👥 SĨ SỐ BUỔI HỌC:
+• Có mặt: ${presentCount}/${activeStudents.length} học viên (${Math.round(
+      (presentCount / (activeStudents.length || 1)) * 100
+    )}%)
+• Đúng giờ: ${onTimeCount} | Đi muộn: ${lateCount}
+• Nghỉ có phép: ${excusedCount} | Vắng mặt: ${absentCount}
+• Hoàn thành BTVN: ${hwDoneCount}/${activeStudents.length} em
+
+📖 CHỦ ĐỀ BÀI HỌC:
+${topic ? topic : "Theo phân phối chương trình giáo trình"}
+
+📝 DẶN DÒ & BTVN:
+${teacherNote ? teacherNote : "Các em ôn lại từ vựng và hoàn thành bài tập được giao."}
+
+👉 Quý phụ huynh vui lòng tra cứu sổ liên lạc điện tử & quét mã VietQR tự động tại:
+${typeof window !== "undefined" ? window.location.origin : "https://danielts.nextband.vn"}/p/...
+
+Trân trọng cảm ơn Quý phụ huynh!`;
+
+    navigator.clipboard.writeText(text);
+    notify("📋 Đã sao chép tin nhắn báo cáo Zalo! Thầy chỉ cần bấm Ctrl+V để gửi vào nhóm lớp.");
+  };
+
+  const handleExportAttendanceExcel = () => {
+    if (!detail) return;
+    const rows = detail.students.map((s, idx) => {
+      const row: Record<string, any> = {
+        "STT": idx + 1,
+        "Mã Học Viên": s.studentCode || `DTS-${String(idx + 1).padStart(3, "0")}`,
+        "Họ và Tên": s.name,
+        "Số Điện Thoại": s.phone || "—",
+        "Trạng Thái":
+          s.status === "ACTIVE"
+            ? "Đang học"
+            : s.status === "PAUSED"
+            ? "Bảo lưu"
+            : "Đã nghỉ",
+      };
+
+      // Đưa từng buổi trong dải 8 buổi vào cột Excel
+      detail.sessionHistory.slice(0, 8).forEach((sh, sIdx) => {
+        const colName = `Buổi ${sIdx + 1} (${sh.date.slice(8, 10)}/${sh.date.slice(5, 7)})`;
+        row[colName] = sh.isCompleted ? "Có mặt" : "—";
+      });
+
+      row["Tổng Buổi Học"] = `${s.attended}/${s.targetSessions || 8}`;
+      row["Tỉ Lệ Chuyên Cần"] = `${Math.round(
+        (s.attended / (s.targetSessions || 8)) * 100
+      )}%`;
+      row["Học Phí Chu Kỳ"] = vnd(detail.class.monthlyTuition);
+      row["Đã Đóng"] = vnd(s.tuition?.paid || 0);
+      row["Còn Nợ"] = vnd(s.tuition?.debt || 0);
+
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "So_Diem_Danh");
+
+    const fileName = `So_Diem_Danh_${detail.class.name.replace(/[^a-zA-Z0-9]/g, "_")}_${date}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    notify(`📊 Đã xuất file Excel sổ điểm danh: ${fileName}`);
   };
 
   const handleUpdateStudentStatus = async (
@@ -1470,12 +1598,32 @@ function ClassView({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={handleCopyZaloReport}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-extrabold border border-indigo-200/80 active:scale-95 transition"
+              title="Sao chép mẫu tin nhắn báo cáo buổi học định dạng chuẩn để gửi vào Zalo phụ huynh"
+            >
+              <Copy className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Báo cáo Zalo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportAttendanceExcel}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold border border-slate-200 active:scale-95 transition"
+              title="Xuất file Excel ma trận 8 buổi học và tỉ lệ chuyên cần chuẩn trung tâm"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
+              <span>Sổ Excel</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleMarkAllPresent}
               disabled={detail.students.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-extrabold border border-indigo-200/80 active:scale-95 transition"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-extrabold border border-emerald-200/80 active:scale-95 transition"
               title="Đánh dấu nhanh Có mặt cho toàn bộ học viên trong lớp"
             >
-              <Zap className="w-3.5 h-3.5 fill-indigo-600" />
+              <Zap className="w-3.5 h-3.5 fill-emerald-600" />
               <span>Có mặt tất cả</span>
             </button>
 
@@ -1513,6 +1661,135 @@ function ClassView({
           </div>
         </div>
       </div>
+
+      {/* THANH CHỈ SỐ HỌC VỤ REAL-TIME (ACADEMY KPI BAR) */}
+      {(() => {
+        const activeStudents = detail.students.filter(
+          (s) => (s.status || "ACTIVE") === "ACTIVE"
+        );
+        const presentCount = activeStudents.filter((s) =>
+          ["PRESENT", "LATE"].includes(marks[s.studentId])
+        ).length;
+        const onTimeCount = activeStudents.filter(
+          (s) => marks[s.studentId] === "PRESENT"
+        ).length;
+        const lateCount = activeStudents.filter(
+          (s) => marks[s.studentId] === "LATE"
+        ).length;
+        const excusedCount = activeStudents.filter(
+          (s) => marks[s.studentId] === "EXCUSED"
+        ).length;
+        const absentCount = activeStudents.filter(
+          (s) => marks[s.studentId] === "ABSENT"
+        ).length;
+        const hwDoneCount = activeStudents.filter(
+          (s) => homeworkMarks[s.studentId] !== false
+        ).length;
+        const rate =
+          activeStudents.length > 0
+            ? Math.round((presentCount / activeStudents.length) * 100)
+            : 0;
+        const currentSession = detail.sessionHistory.find((s) => s.date === date);
+
+        return (
+          <div className="p-4 rounded-3xl bg-slate-900 text-white space-y-3.5 shadow-lg border border-slate-800">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                    Chỉ số học vụ thời gian thực · {currentSession?.title || `Buổi ngày ${fmtDate(date)}`}
+                  </span>
+                </div>
+                <h4 className="text-base font-black text-white mt-0.5">
+                  Tỉ lệ chuyên cần: <span className="text-emerald-400">{rate}%</span>
+                  <span className="text-xs font-semibold text-slate-400 ml-2">
+                    ({presentCount}/{activeStudents.length} học viên có mặt)
+                  </span>
+                </h4>
+              </div>
+
+              {/* 4 CHỈ SỐ NHANH */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                <div className="bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <span className="text-[10px] text-slate-400 font-bold block">🟢 Đúng giờ</span>
+                  <strong className="text-xs font-black text-emerald-400">{onTimeCount} em</strong>
+                </div>
+                <div className="bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <span className="text-[10px] text-slate-400 font-bold block">🟠 Đi muộn</span>
+                  <strong className="text-xs font-black text-amber-400">{lateCount} em</strong>
+                </div>
+                <div className="bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <span className="text-[10px] text-slate-400 font-bold block">🔵 Có phép</span>
+                  <strong className="text-xs font-black text-sky-400">{excusedCount} em</strong>
+                </div>
+                <div className="bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <span className="text-[10px] text-slate-400 font-bold block">🔴 Vắng mặt</span>
+                  <strong className="text-xs font-black text-rose-400">{absentCount} em</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* THANH TIẾN ĐỘ CHUYÊN CẦN */}
+            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500 rounded-full transition-all duration-500"
+                style={{ width: `${rate}%` }}
+              />
+            </div>
+
+            {/* KẾ HOẠCH BÀI HỌC & DẶN DÒ */}
+            <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate">
+                  {topic ? `📖 ${topic}` : "Chưa có chủ đề bài học"}
+                </span>
+                <span className="text-slate-500">·</span>
+                <span className="text-slate-400">
+                  BTVN: <strong className="text-teal-300 font-bold">{hwDoneCount}/{activeStudents.length} em nộp</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLessonPlan(!showLessonPlan)}
+                className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[11px] font-bold transition flex items-center gap-1 shrink-0"
+              >
+                <Edit3 className="w-3 h-3" />
+                {showLessonPlan ? "Đóng giáo án" : "Soạn giáo án & BTVN buổi này"}
+              </button>
+            </div>
+
+            {showLessonPlan && (
+              <div className="p-3.5 bg-slate-800/90 rounded-2xl border border-slate-700 space-y-2.5 animate-fadeIn text-xs">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">
+                    Chủ đề bài giảng (Lesson Topic) — Tự động hiển thị ở Cổng Phụ Huynh:
+                  </label>
+                  <input
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="VD: Unit 4 - Writing Task 2 (Causes & Solutions) / Speaking Part 2"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-300 block mb-1">
+                    Dặn dò &amp; Bài tập về nhà (Homework Assignment):
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="VD: Hoàn thành bài viết Task 2 nộp trước 18:00 Thứ 5, học thuộc 15 từ vựng Topic Environment..."
+                    value={teacherNote}
+                    onChange={(e) => setTeacherNote(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* THANH LỌC TRẠNG THÁI HỌC VIÊN */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -1608,132 +1885,148 @@ function ClassView({
                   : "border-slate-200/80 hover:border-indigo-200"
               }`}
             >
-              {/* TRÁI: THÔNG TIN HỌC VIÊN & CẢNH BÁO */}
-              <div className="min-w-0 lg:w-5/12 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDossierStudentId(s.studentId)}
-                    className="font-extrabold text-slate-900 hover:text-indigo-600 transition text-base text-left flex items-center gap-1.5 group"
-                    title="Bấm để xem toàn bộ hồ sơ học viên"
-                  >
-                    <span>{s.name}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200/60 group-hover:bg-indigo-600 group-hover:text-white transition">
-                      Hồ sơ ↗
-                    </span>
-                  </button>
-
-                  {/* CHỌN TRẠNG THÁI HỌC VIÊN */}
-                  <select
-                    value={s.status || "ACTIVE"}
-                    onChange={(e) => handleUpdateStudentStatus(s, e.target.value as any)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border transition cursor-pointer ${
-                      (s.status || "ACTIVE") === "ACTIVE"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : s.status === "PAUSED"
-                        ? "bg-amber-50 text-amber-800 border-amber-300"
-                        : "bg-slate-100 text-slate-600 border-slate-300"
-                    }`}
-                    title="Chuyển trạng thái: Đang học / Bảo lưu / Đã nghỉ"
-                  >
-                    <option value="ACTIVE">🟢 Đang học</option>
-                    <option value="PAUSED">⏸️ Bảo lưu</option>
-                    <option value="FINISHED">🏁 Đã nghỉ</option>
-                  </select>
-
-                  {s.phone && (
-                    <span className="text-xs text-slate-400 font-medium">· {s.phone}</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveStudent(s)}
-                    title="Xóa học viên khỏi lớp"
-                    className="ml-auto lg:ml-1 text-slate-300 hover:text-rose-600 p-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+              {/* TRÁI: AVATAR & THÔNG TIN HỌC VIÊN & CẢNH BÁO */}
+              <div className="min-w-0 lg:w-5/12 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 mt-0.5">
+                  {s.name
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(-2)
+                    .map((w) => w[0]?.toUpperCase())
+                    .join("") || "HV"}
                 </div>
 
-                {isMonthly ? (
-                  <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span>
-                      Đã học: <strong className="text-slate-900">{s.usedSessions}/{s.targetSessions} buổi</strong>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDossierStudentId(s.studentId)}
+                      className="font-extrabold text-slate-900 hover:text-indigo-600 transition text-base text-left flex items-center gap-1.5 group"
+                      title="Bấm để xem toàn bộ hồ sơ học viên"
+                    >
+                      <span>{s.name}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200/60 group-hover:bg-indigo-600 group-hover:text-white transition">
+                        Hồ sơ ↗
+                      </span>
+                    </button>
+
+                    <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
+                      {s.studentCode || `DTS-${s.studentId.slice(-4).toUpperCase()}`}
                     </span>
-                    <span className="text-slate-300">·</span>
-                    <span>Đi học: <strong>{s.attended}</strong></span>
-                    {s.absentUnexcused > 0 && (
-                      <span className="text-rose-600 font-bold">· Vắng: {s.absentUnexcused}</span>
-                    )}
-                    {s.excused > 0 && (
-                      <span className="text-sky-700 font-bold">· Có phép: {s.excused}</span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-600">
-                    Đã học: <strong className="text-slate-900">{s.attended} buổi</strong> · Có phép: {s.excused} · Vắng: {s.absentUnexcused}
-                  </div>
-                )}
 
-                {/* TRẠNG THÁI HỌC PHÍ (HỖ TRỢ PRIVACY MODE) */}
-                {s.tuition ? (
-                  <div className="pt-0.5">
-                    {overSessions > 0 ? (
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {privacyMode ? (
-                          <span>Học quá {overSessions} buổi — Cần thu phí kỳ mới</span>
-                        ) : (
-                          <span>Học quá {overSessions} buổi — Cần thu {vnd(detail.class.monthlyTuition)}</span>
-                        )}
-                      </div>
-                    ) : debt > 0 ? (
-                      <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {privacyMode ? (
-                          <span>Chưa đóng đủ học phí</span>
-                        ) : (
-                          <span>Còn thiếu {vnd(debt)} (Đã đóng {vnd(s.tuition.paid)}/{vnd(s.tuition.total)})</span>
-                        )}
-                        {!privacyMode && s.tuition.dueDate && (
-                          <span className="text-[11px] font-normal text-rose-600">· Hạn: {fmtDate(s.tuition.dueDate)}</span>
-                        )}
-                      </div>
-                    ) : isLastSession ? (
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">
-                        <Clock className="w-3.5 h-3.5" />
-                        {s.remainingSessions === 0
-                          ? "Đã học đủ số buổi — Nhắc nộp tháng mới"
-                          : "Còn 1 buổi cuối — Nhắc chuẩn bị nộp phí"}
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60">
-                        <Check className="w-3.5 h-3.5" />
-                        {privacyMode ? (
-                          <span>Đã hoàn thành học phí</span>
-                        ) : (
-                          <span>Đã đóng đủ ({vnd(s.tuition.paid)})</span>
-                        )}
-                        {isMonthly && s.remainingSessions > 0 && ` · Còn ${s.remainingSessions} buổi`}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs font-bold text-rose-600">Chưa nạp học phí</div>
-                )}
+                    {/* CHỌN TRẠNG THÁI HỌC VIÊN */}
+                    <select
+                      value={s.status || "ACTIVE"}
+                      onChange={(e) => handleUpdateStudentStatus(s, e.target.value as any)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border transition cursor-pointer ${
+                        (s.status || "ACTIVE") === "ACTIVE"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : s.status === "PAUSED"
+                          ? "bg-amber-50 text-amber-800 border-amber-300"
+                          : "bg-slate-100 text-slate-600 border-slate-300"
+                      }`}
+                      title="Chuyển trạng thái: Đang học / Bảo lưu / Đã nghỉ"
+                    >
+                      <option value="ACTIVE">🟢 Đang học</option>
+                      <option value="PAUSED">⏸️ Bảo lưu</option>
+                      <option value="FINISHED">🏁 Đã nghỉ</option>
+                    </select>
 
-                {s.tuitionNote && (
-                  <div
-                    onClick={() => setNoteFor(s)}
-                    className="cursor-pointer mt-1 px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 font-medium flex items-center justify-between gap-2"
-                  >
-                    <span>📌 {s.tuitionNote}</span>
-                    <span className="text-[11px] font-bold text-amber-700 underline">Sửa</span>
+                    {s.phone && (
+                      <span className="text-xs text-slate-400 font-medium">· {s.phone}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStudent(s)}
+                      title="Xóa học viên khỏi lớp"
+                      className="ml-auto text-slate-300 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                )}
+
+                  {isMonthly ? (
+                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>
+                        Đã học: <strong className="text-slate-900">{s.usedSessions}/{s.targetSessions} buổi</strong>
+                      </span>
+                      <span className="text-slate-300">·</span>
+                      <span>Đi học: <strong>{s.attended}</strong></span>
+                      {s.absentUnexcused > 0 && (
+                        <span className="text-rose-600 font-bold">· Vắng: {s.absentUnexcused}</span>
+                      )}
+                      {s.excused > 0 && (
+                        <span className="text-sky-700 font-bold">· Có phép: {s.excused}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-600">
+                      Đã học: <strong className="text-slate-900">{s.attended} buổi</strong> · Có phép: {s.excused} · Vắng: {s.absentUnexcused}
+                    </div>
+                  )}
+
+                  {/* TRẠNG THÁI HỌC PHÍ (HỖ TRỢ PRIVACY MODE) */}
+                  {s.tuition ? (
+                    <div className="pt-0.5">
+                      {overSessions > 0 ? (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {privacyMode ? (
+                            <span>Học quá {overSessions} buổi — Cần thu phí kỳ mới</span>
+                          ) : (
+                            <span>Học quá {overSessions} buổi — Cần thu {vnd(detail.class.monthlyTuition)}</span>
+                          )}
+                        </div>
+                      ) : debt > 0 ? (
+                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          {privacyMode ? (
+                            <span>Chưa đóng đủ học phí</span>
+                          ) : (
+                            <span>Còn thiếu {vnd(debt)} (Đã đóng {vnd(s.tuition.paid)}/{vnd(s.tuition.total)})</span>
+                          )}
+                          {!privacyMode && s.tuition.dueDate && (
+                            <span className="text-[11px] font-normal text-rose-600">· Hạn: {fmtDate(s.tuition.dueDate)}</span>
+                          )}
+                        </div>
+                      ) : isLastSession ? (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">
+                          <Clock className="w-3.5 h-3.5" />
+                          {s.remainingSessions === 0
+                            ? "Đã học đủ số buổi — Nhắc nộp tháng mới"
+                            : "Còn 1 buổi cuối — Nhắc chuẩn bị nộp phí"}
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60">
+                          <Check className="w-3.5 h-3.5" />
+                          {privacyMode ? (
+                            <span>Đã hoàn thành học phí</span>
+                          ) : (
+                            <span>Đã đóng đủ ({vnd(s.tuition.paid)})</span>
+                          )}
+                          {isMonthly && s.remainingSessions > 0 && ` · Còn ${s.remainingSessions} buổi`}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold text-rose-600">Chưa nạp học phí</div>
+                  )}
+
+                  {s.tuitionNote && (
+                    <div
+                      onClick={() => setNoteFor(s)}
+                      className="cursor-pointer mt-1 px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 font-medium flex items-center justify-between gap-2"
+                    >
+                      <span>📌 {s.tuitionNote}</span>
+                      <span className="text-[11px] font-bold text-amber-700 underline">Sửa</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* PHẢI: 4 NÚT ĐIỂM DANH + LINK PH + GHI CHÚ + NẠP PHÍ */}
-              <div className="flex flex-wrap items-center gap-2">
+              {/* PHẢI: 4 NÚT ĐIỂM DANH + BTVN + NHẬN XÉT + LINK PH + NẠP PHÍ */}
+              <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2">
+                {/* 4 NÚT TRẠNG THÁI */}
                 <div className="flex items-center bg-slate-50 p-1 rounded-2xl border border-slate-200/80 gap-1">
                   {STATUS_BUTTONS.map((b) => {
                     const active = marks[s.studentId] === b.key;
@@ -1756,10 +2049,111 @@ function ClassView({
                   })}
                 </div>
 
+                {/* BTVN TOGGLE */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHomeworkMarks((p) => ({
+                      ...p,
+                      [s.studentId]: p[s.studentId] === false ? true : false,
+                    }))
+                  }
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                    homeworkMarks[s.studentId] !== false
+                      ? "bg-teal-50 text-teal-700 border-teal-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
+                  }`}
+                  title="Nhấn để đổi trạng thái làm bài tập về nhà"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>
+                    {homeworkMarks[s.studentId] !== false
+                      ? "✓ Đã làm BTVN"
+                      : "✕ Chưa làm BTVN"}
+                  </span>
+                </button>
+
+                {/* NHẬN XÉT BUỔI HỌC VỚI QUICK TAGS */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingNoteFor(
+                        editingNoteFor === s.studentId ? null : s.studentId
+                      )
+                    }
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                      noteMarks[s.studentId]
+                        ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                    title="Nhận xét buổi học gửi phụ huynh"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span className="max-w-[120px] truncate">
+                      {noteMarks[s.studentId] || "Nhận xét..."}
+                    </span>
+                  </button>
+
+                  {editingNoteFor === s.studentId && (
+                    <div className="absolute right-0 top-full mt-1.5 z-30 w-72 p-3 bg-white rounded-2xl shadow-xl border border-slate-200 space-y-2 animate-fadeIn text-xs">
+                      <div className="flex items-center justify-between font-bold text-slate-800">
+                        <span>Nhận xét buổi học:</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingNoteFor(null)}
+                          className="text-slate-400 hover:text-slate-600 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* QUICK TAGS */}
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          "⭐ Phát biểu tích cực",
+                          "💬 Nói tự tin",
+                          "📖 Cần ôn từ vựng",
+                          "✍️ Cải thiện bài viết",
+                          "⚠️ Mất tập trung",
+                        ].map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              setNoteMarks((p) => ({
+                                ...p,
+                                [s.studentId]: tag,
+                              }));
+                              setEditingNoteFor(null);
+                            }}
+                            className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 transition"
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+
+                      <input
+                        className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                        placeholder="Hoặc gõ nhận xét riêng..."
+                        value={noteMarks[s.studentId] || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNoteMarks((p) => ({
+                            ...p,
+                            [s.studentId]: val,
+                          }));
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={() => handleCopyParentLink(s)}
-                  className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 shadow-sm transition"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 shadow-xs transition"
                   title="Sao chép link sổ liên lạc và tin nhắn Zalo gửi phụ huynh"
                 >
                   <Share2 className="w-3.5 h-3.5" />
@@ -1768,18 +2162,8 @@ function ClassView({
 
                 <button
                   type="button"
-                  onClick={() => setNoteFor(s)}
-                  className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-sm"
-                  title="Ghi chú nhắc phí"
-                >
-                  <Edit3 className="w-3.5 h-3.5 inline mr-1" />
-                  Ghi chú
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => setPayFor(s)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 active:scale-95 transition"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs active:scale-95 transition"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
                   Nạp học phí
