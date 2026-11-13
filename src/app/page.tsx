@@ -2084,20 +2084,46 @@ function AddClassModal({
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<ClassType>("MONTHLY");
-  const [scheduleText, setScheduleText] = useState("");
+
+  // Bộ chọn lịch học thông minh
+  const [selectedDays, setSelectedDays] = useState<string[]>(["Thứ 3", "Thứ 5"]);
+  const [startTime, setStartTime] = useState("18:00");
+  const [endTime, setEndTime] = useState("19:30");
+  const [isCustomSchedule, setIsCustomSchedule] = useState(false);
+  const [customScheduleText, setCustomScheduleText] = useState("");
+
   const [fee, setFee] = useState(1000000);
   const [pricePerSession, setPricePerSession] = useState(125000);
   const [err, setErr] = useState("");
 
+  const ALL_DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
+
+  const toggleDay = (day: string) => {
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length === 1) return;
+      setSelectedDays(selectedDays.filter((d) => d !== day));
+    } else {
+      setSelectedDays([...selectedDays, day]);
+    }
+  };
+
+  const generatedSchedule =
+    selectedDays.length > 0
+      ? `${selectedDays.join(", ")} (${startTime} - ${endTime})`
+      : "";
+
+  const finalSchedule = isCustomSchedule ? customScheduleText : generatedSchedule;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErr("");
     try {
       await api("/api/classes", {
         method: "POST",
         body: JSON.stringify({
           name,
           type,
-          scheduleText,
+          scheduleText: finalSchedule,
           monthlyTuition: fee,
           pricePerSession: type === "MONTHLY" ? pricePerSession : undefined,
         }),
@@ -2167,14 +2193,149 @@ function AddClassModal({
           />
         </div>
 
-        <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">Lịch học</label>
-          <input
-            className={inputCls}
-            placeholder="VD: Thứ 3, Thứ 5 (18:00 - 19:30)"
-            value={scheduleText}
-            onChange={(e) => setScheduleText(e.target.value)}
-          />
+        {/* BỘ CHỌN LỊCH HỌC TRỰC QUAN */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-800">
+              Lịch học trong tuần
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                if (!isCustomSchedule) setCustomScheduleText(generatedSchedule);
+                setIsCustomSchedule(!isCustomSchedule);
+              }}
+              className="text-[11px] font-bold text-indigo-600 hover:underline"
+            >
+              {isCustomSchedule ? "Dùng bộ chọn nhanh" : "Nhập tay tự do"}
+            </button>
+          </div>
+
+          {isCustomSchedule ? (
+            <input
+              className={inputCls}
+              placeholder="VD: Thứ 3, Thứ 5 (18:00 - 19:30)"
+              value={customScheduleText}
+              onChange={(e) => setCustomScheduleText(e.target.value)}
+            />
+          ) : (
+            <div className="space-y-2.5">
+              {/* CÁC NÚT BẤM NHANH CA HỌC PHỔ BIẾN */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: "Thứ 3, 5", days: ["Thứ 3", "Thứ 5"] },
+                  { label: "Thứ 2, 4, 6", days: ["Thứ 2", "Thứ 4", "Thứ 6"] },
+                  { label: "Thứ 3, 5, 7", days: ["Thứ 3", "Thứ 5", "Thứ 7"] },
+                  { label: "Cuối tuần (T7, CN)", days: ["Thứ 7", "Chủ Nhật"] },
+                ].map((p) => {
+                  const isMatch =
+                    p.days.length === selectedDays.length &&
+                    p.days.every((d) => selectedDays.includes(d));
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setSelectedDays(p.days)}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${
+                        isMatch
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 7 NÚT CHỌN TỪNG NGÀY TRONG TUẦN */}
+              <div>
+                <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
+                  Bấm để chọn 2 ngày cố định (hoặc nhiều hơn):
+                </span>
+                <div className="grid grid-cols-7 gap-1">
+                  {ALL_DAYS.map((d) => {
+                    const active = selectedDays.includes(d);
+                    const shortName = d === "Chủ Nhật" ? "CN" : d.replace("Thứ ", "T");
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => toggleDay(d)}
+                        className={`py-2 rounded-xl text-xs font-extrabold border text-center transition ${
+                          active
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                        title={d}
+                      >
+                        {shortName}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CHỌN GIỜ BẮT ĐẦU VÀ GIỜ KẾT THÚC */}
+              <div>
+                <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
+                  Khung giờ học:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Giờ bắt đầu:</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Giờ kết thúc:</span>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                {/* CA GIỜ GỢI Ý */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[
+                    { label: "17:30 - 19:00", s: "17:30", e: "19:00" },
+                    { label: "18:00 - 19:30", s: "18:00", e: "19:30" },
+                    { label: "19:30 - 21:00", s: "19:30", e: "21:00" },
+                    { label: "08:00 - 09:30", s: "08:00", e: "09:30" },
+                  ].map((t) => (
+                    <button
+                      key={t.label}
+                      type="button"
+                      onClick={() => {
+                        setStartTime(t.s);
+                        setEndTime(t.e);
+                      }}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition ${
+                        startTime === t.s && endTime === t.e
+                          ? "bg-slate-800 text-white border-slate-800"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* KẾT QUẢ TỰ ĐỘNG SINH */}
+              <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200/60 text-xs flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Lịch lớp:</span>
+                <strong className="text-indigo-700 font-extrabold">{generatedSchedule}</strong>
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
