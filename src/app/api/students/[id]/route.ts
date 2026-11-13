@@ -31,8 +31,19 @@ export async function GET(req: NextRequest, { params }: Ctx) {
           payments: {
             orderBy: { paidAt: "desc" },
           },
+          evaluations: {
+            orderBy: { monthYear: "desc" },
+          },
         },
         orderBy: { joinDate: "asc" },
+      },
+      evaluations: {
+        orderBy: { monthYear: "desc" },
+        include: {
+          classRoom: {
+            select: { id: true, name: true, level: true },
+          },
+        },
       },
       studentIssues: {
         orderBy: { createdAt: "desc" },
@@ -103,7 +114,24 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   ).length;
 
   const attendedTotal = presentCount + lateCount;
-  const usedSessions = attendedTotal + absentCount; // Có mặt + Muộn + Vắng không phép
+
+  // Tính số buổi đã qua theo lịch của lớp (loại trừ các buổi nghỉ có phép):
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const joinDateStr = new Date(activeEnrollment.joinDate).toISOString().slice(0, 10);
+  const pastScheduledSessions = cls.sessions.filter((s) => {
+    const sDate = new Date(s.sessionDate).toISOString().slice(0, 10);
+    return sDate <= todayStr && sDate >= joinDateStr;
+  });
+  const scheduledPassed = Math.max(0, pastScheduledSessions.length - excusedCount);
+  const usedSessions = Math.max(attendedTotal + absentCount, scheduledPassed);
+
+  // Thống kê bài tập về nhà (BTVN)
+  const homeworkDoneCount = attendanceTimeline.filter((a) => a.homeworkDone !== false).length;
+  const homeworkMissedCount = attendanceTimeline.filter((a) => a.homeworkDone === false).length;
+  const homeworkRate =
+    attendanceTimeline.length > 0
+      ? Math.round((homeworkDoneCount / attendanceTimeline.length) * 100)
+      : 100;
 
   const totalRequired = cycles.reduce(
     (sum, cy) => sum + Math.max(0, cy.totalAmount - cy.discountAmount),
@@ -132,6 +160,11 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     attendanceTimeline.length > 0
       ? Math.round((attendedTotal / attendanceTimeline.length) * 100)
       : 100;
+
+  // Danh sách đánh giá định kỳ tháng
+  const evaluations = activeEnrollment.evaluations || [];
+  const allEvaluations = student.evaluations || [];
+  const latestEvaluation = evaluations[0] || allEvaluations[0] || null;
 
   // Tính số ngày đã gắn bó từ ngày bắt đầu học
   const joinDateObj = new Date(activeEnrollment.joinDate);
@@ -167,15 +200,19 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       name: student.name,
       phone: student.phone,
       email: student.email,
+      avatar: student.avatar,
+      createdAt: student.createdAt,
     },
     enrollment: {
       id: activeEnrollment.id,
       joinDate: activeEnrollment.joinDate,
       daysAtCenter,
+      status: activeEnrollment.status || "ACTIVE",
       billingMode: activeEnrollment.billingMode,
       note: activeEnrollment.note || "",
       classId: cls.id,
       className: cls.name,
+      classLevel: cls.level,
       classType: cls.type || "MONTHLY",
       scheduleText: cls.scheduleText,
       monthlyTuition: cls.monthlyTuition,
@@ -188,12 +225,22 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       excusedCount,
       absentCount,
       attendedTotal,
+      scheduledPassed,
+      totalScheduledInPeriod: pastScheduledSessions.length,
       usedSessions,
       targetSessions,
       paidSessions,
       remainingSessions,
       attendanceRate,
     },
+    homeworkSummary: {
+      doneCount: homeworkDoneCount,
+      missedCount: homeworkMissedCount,
+      rate: homeworkRate,
+    },
+    evaluations,
+    allEvaluations,
+    latestEvaluation,
     tuitionSummary: {
       totalRequired,
       totalDiscount,
@@ -224,33 +271,38 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     allEnrollments: student.enrollments.map((e) => ({
       classId: e.classId,
       className: e.classRoom.name,
+      level: e.classRoom.level,
+      status: e.status,
       joinDate: e.joinDate,
     })),
   });
 }
 
-// Cập nhật thông tin học viên (Họ tên, SĐT, Ngày bắt đầu học, Ghi chú quá trình học)
+// Cập nhật thông tin học viên (Họ tên, SĐT, Email, Mã HV, Ngày bắt đầu học, Trạng thái, Ghi chú)
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const body = await req.json();
-  const { enrollmentId, name, phone, joinDate, note } = body;
+  const { enrollmentId, name, phone, email, studentCode, joinDate, note, status } = body;
 
   await prisma.$transaction(async (tx) => {
-    if (name !== undefined || phone !== undefined) {
+    if (name !== undefined || phone !== undefined || studentCode !== undefined || email !== undefined) {
       await tx.user.update({
         where: { id: params.id },
         data: {
           name: name ? String(name).trim() : undefined,
           phone: phone !== undefined ? (phone ? String(phone).trim() : null) : undefined,
+          studentCode: studentCode !== undefined ? (studentCode ? String(studentCode).trim().toUpperCase() : null) : undefined,
+          email: email !== undefined ? (email ? String(email).trim().toLowerCase() : undefined) : undefined,
         },
       });
     }
 
-    if (enrollmentId && (joinDate !== undefined || note !== undefined)) {
+    if (enrollmentId && (joinDate !== undefined || note !== undefined || status !== undefined)) {
       await tx.enrollment.update({
         where: { id: String(enrollmentId) },
         data: {
           joinDate: joinDate ? new Date(joinDate) : undefined,
           note: note !== undefined ? (note ? String(note).trim() : null) : undefined,
+          status: status !== undefined ? String(status) : undefined,
         },
       });
     }

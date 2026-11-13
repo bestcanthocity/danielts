@@ -45,7 +45,10 @@ import {
   Download,
   Award,
   Star,
-  Medal
+  Medal,
+  Printer,
+  ExternalLink,
+  User
 } from "lucide-react";
 
 type ClassType = "MONTHLY" | "COURSE";
@@ -2427,6 +2430,20 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                           {s.studentCode || `DTS-${s.studentId.slice(-4).toUpperCase()}`}
                         </span>
 
+                        {/* NÚT MỞ NHANH HỒ SƠ ĐIỆN TỬ TRÊN HÀNG COMPACT */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDossierStudentId(s.studentId);
+                          }}
+                          className="text-[10px] font-bold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 rounded-full flex items-center gap-1 transition shrink-0"
+                          title="Mở Sổ Lý Lịch & Hồ Sơ Điện Tử Toàn Diện (CV 360°)"
+                        >
+                          <FileText className="w-2.5 h-2.5 text-indigo-600" />
+                          <span>Hồ sơ điện tử</span>
+                        </button>
+
                         {/* HUY HIỆU HỌC PHÍ GỌN GÀNG 1 DÒNG */}
                         {s.status === "PAUSED" ? (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
@@ -2669,6 +2686,16 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                     {/* DÀN NÚT HÀNH ĐỘNG DƯỚI NGĂN MỞ RỘNG */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* NÚT MỞ HỒ SƠ ĐIỆN TỬ TOÀN DIỆN */}
+                        <button
+                          type="button"
+                          onClick={() => setDossierStudentId(s.studentId)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 transition shadow-2xs"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Hồ sơ điện tử (CV 360°)</span>
+                        </button>
+
                         {/* NÚT ĐÁNH GIÁ THÁNG */}
                         <button
                           type="button"
@@ -2854,7 +2881,7 @@ Trân trọng cảm ơn Quý phụ huynh!`;
 }
 
 /* ========================================================================= */
-/* HỒ SƠ TOÀN DIỆN HỌC VIÊN (360° STUDENT DOSSIER MODAL)                     */
+/* HỒ SƠ ĐIỆN TỬ TOÀN DIỆN HỌC VIÊN (360° ELECTRONIC STUDENT DOSSIER / CV)   */
 /* ========================================================================= */
 function StudentDossierModal({
   studentId,
@@ -2869,15 +2896,35 @@ function StudentDossierModal({
 }) {
   const [dossier, setDossier] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [tab, setTab] = useState<"ATTENDANCE" | "TUITION" | "EDIT">(
-    "ATTENDANCE"
+  const [tab, setTab] = useState<"OVERVIEW" | "EVALUATIONS" | "ATTENDANCE" | "TUITION" | "EDIT">(
+    "OVERVIEW"
   );
+  const [showPrintCV, setShowPrintCV] = useState(false);
+  const [attFilter, setAttFilter] = useState<"ALL" | "ABSENT" | "HOMEWORK_MISSING">("ALL");
 
+  // Form cập nhật hồ sơ học viên
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editStudentCode, setEditStudentCode] = useState("");
   const [editJoinDate, setEditJoinDate] = useState("");
+  const [editStatus, setEditStatus] = useState("ACTIVE");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Form thêm / sửa đánh giá định kỳ tháng
+  const [showAddEval, setShowAddEval] = useState(false);
+  const [evalMonth, setEvalMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [evalClassification, setEvalClassification] = useState<"XUAT_SAC" | "GIOI" | "KHA" | "CAN_KEM">("GIOI");
+  const [evalTestScore, setEvalTestScore] = useState("8.5");
+  const [evalGrammarScore, setEvalGrammarScore] = useState("8.0");
+  const [evalSkillsScore, setEvalSkillsScore] = useState("8.5");
+  const [evalAttitude, setEvalAttitude] = useState("Chăm chỉ, chú ý nghe giảng, tích cực phát biểu");
+  const [evalHomeworkStatus, setEvalHomeworkStatus] = useState("Hoàn thành đầy đủ 100%");
+  const [evalStrengths, setEvalStrengths] = useState("Từ vựng phong phú, phản xạ nói tiếng Anh tự tin");
+  const [evalImprovements, setEvalImprovements] = useState("Cần chú ý cẩn thận khi chia thì quá khứ đơn và ngữ pháp câu phức");
+  const [evalTeacherComment, setEvalTeacherComment] = useState("Em có nhiều tiến bộ rõ rệt trong tháng qua, tiếp tục phát huy!");
+  const [evalSaving, setEvalSaving] = useState(false);
 
   const loadDossier = useCallback(async () => {
     try {
@@ -2887,11 +2934,14 @@ function StudentDossierModal({
       setDossier(d);
       setEditName(d.student?.name || "");
       setEditPhone(d.student?.phone || "");
+      setEditEmail(d.student?.email || "");
+      setEditStudentCode(d.student?.studentCode || "");
       setEditJoinDate(
         d.enrollment?.joinDate
           ? new Date(d.enrollment.joinDate).toISOString().slice(0, 10)
           : ""
       );
+      setEditStatus(d.enrollment?.status || "ACTIVE");
       setEditNote(d.enrollment?.note || "");
     } catch {
       // ignore
@@ -2915,20 +2965,62 @@ function StudentDossierModal({
           enrollmentId: dossier.enrollment.id,
           name: editName,
           phone: editPhone,
+          email: editEmail,
+          studentCode: editStudentCode,
           joinDate: editJoinDate,
+          status: editStatus,
           note: editNote,
         }),
       });
       await loadDossier();
       onSaved();
-      setTab("ATTENDANCE");
+      setTab("OVERVIEW");
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSaveEvaluation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dossier) return;
+    try {
+      setEvalSaving(true);
+      await api(`/api/classes/${dossier.enrollment.classId}/evaluations`, {
+        method: "POST",
+        body: JSON.stringify({
+          enrollmentId: dossier.enrollment.id,
+          studentId: dossier.student.id,
+          monthYear: evalMonth,
+          classification: evalClassification,
+          testScore: evalTestScore ? Number(evalTestScore) : null,
+          grammarScore: evalGrammarScore ? Number(evalGrammarScore) : null,
+          skillsScore: evalSkillsScore ? Number(evalSkillsScore) : null,
+          attitude: evalAttitude,
+          homeworkStatus: evalHomeworkStatus,
+          strengths: evalStrengths,
+          improvements: evalImprovements,
+          teacherComment: evalTeacherComment,
+        }),
+      });
+      setShowAddEval(false);
+      await loadDossier();
+      onSaved();
+    } catch (err: any) {
+      alert(err.message || "Lỗi lưu đánh giá định kỳ.");
+    } finally {
+      setEvalSaving(false);
+    }
+  };
+
   const handleDeletePayment = async (p: any) => {
-    if (!window.confirm(`Hủy phiếu thu ${vnd(p.amount)} ngày ${fmtDate(p.paidAt)}? Công nợ học phí của học viên sẽ được khôi phục lại tương ứng.`)) return;
+    if (
+      !window.confirm(
+        `Hủy phiếu thu ${vnd(p.amount)} ngày ${fmtDate(
+          p.paidAt
+        )}? Công nợ học phí của học viên sẽ được khôi phục lại tương ứng.`
+      )
+    )
+      return;
     try {
       await api(`/api/payments/${p.id}`, { method: "DELETE" });
       await loadDossier();
@@ -2940,40 +3032,111 @@ function StudentDossierModal({
 
   const handleCopyParent = () => {
     if (!dossier) return;
-    const code = dossier.student.studentCode || dossier.student.phone || dossier.student.id;
-    const parentUrl = `${typeof window !== "undefined" ? window.location.origin : "http://danielts.nextband.vn"}/p/${encodeURIComponent(code)}`;
-    const msg = `Kính gửi Quý phụ huynh em ${dossier.student.name},\nDanielTS xin gửi link tra cứu sổ điểm danh và thanh toán học phí trực tuyến (quét mã VietQR tự động):\n👉 ${parentUrl}\nTrân trọng cảm ơn Quý phụ huynh!`;
+    const code =
+      dossier.student.studentCode ||
+      dossier.student.phone ||
+      dossier.student.id;
+    const parentUrl = `${
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://danielts.nextband.vn"
+    }/p/${encodeURIComponent(code)}`;
+    const msg = `Kính gửi Quý phụ huynh em ${dossier.student.name},\nDanielTS English Center xin gửi đường dẫn tra cứu Sổ Liên Lạc Điện Tử & Hồ Sơ Học Tập định kỳ:\n👉 ${parentUrl}\n(Quý phụ huynh có thể theo dõi chuyên cần từng buổi, điểm kiểm tra tháng, nhận xét của giáo viên và thanh toán học phí qua mã VietQR trực tuyến).\nTrân trọng cảm ơn Quý phụ huynh!`;
     navigator.clipboard.writeText(msg);
-    alert(`Đã sao chép link tra cứu & tin nhắn Zalo gửi phụ huynh em ${dossier.student.name}!`);
+    alert(
+      `Đã sao chép đường dẫn Sổ Liên Lạc Điện Tử gửi phụ huynh em ${dossier.student.name}!`
+    );
   };
 
+  const dInput =
+    "w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition bg-white";
+
+  // Lọc danh sách điểm danh theo filter
+  const filteredTimeline =
+    dossier?.attendanceTimeline?.filter((att: any) => {
+      if (attFilter === "ABSENT") return att.status === "ABSENT" || att.status === "EXCUSED";
+      if (attFilter === "HOMEWORK_MISSING") return att.homeworkDone === false;
+      return true;
+    }) || [];
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl space-y-5 my-8 max-h-[90vh] overflow-y-auto border border-slate-100">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl w-full max-w-4xl p-5 sm:p-7 shadow-2xl space-y-5 my-6 max-h-[92vh] overflow-y-auto border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
         {loading || !dossier ? (
-          <div className="py-16 text-center text-xs text-slate-500">
-            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            Đang tải hồ sơ chi tiết học viên...
+          <div className="py-20 text-center text-xs text-slate-500">
+            <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            Đang tải dữ liệu hồ sơ điện tử học viên...
           </div>
         ) : (
           <>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-mono text-xs font-bold border border-indigo-200">
-                    {dossier.student.studentCode || "HV"}
-                  </span>
-                  <h3 className="text-xl font-extrabold text-slate-900">
-                    {dossier.student.name}
-                  </h3>
+            {/* ================================================================= */}
+            {/* HEADER HỒ SƠ ĐIỆN TỬ: NHẬN DIỆN HỌC VIÊN & CÔNG CỤ NHANH         */}
+            {/* ================================================================= */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-start gap-3.5">
+                {/* AVATAR HỌC VIÊN */}
+                <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-violet-700 text-white font-black text-lg flex items-center justify-center shadow-md shrink-0">
+                  {dossier.student.name
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(-2)
+                    .map((w: string) => w[0]?.toUpperCase())
+                    .join("") || "HV"}
                 </div>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                  <span>📞 {dossier.student.phone || "Chưa có SĐT"}</span>
-                  <span>·</span>
-                  <span>Lớp: <strong className="text-slate-800">{dossier.enrollment.className}</strong></span>
-                </p>
+
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                      {dossier.student.name}
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-mono text-xs font-extrabold border border-indigo-200">
+                      {dossier.student.studentCode || `DTS-${dossier.student.id.slice(-4).toUpperCase()}`}
+                    </span>
+                    <span
+                      className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                        dossier.enrollment.status === "PAUSED"
+                          ? "bg-amber-50 text-amber-800 border-amber-300"
+                          : dossier.enrollment.status === "FINISHED"
+                          ? "bg-slate-100 text-slate-600 border-slate-300"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-300"
+                      }`}
+                    >
+                      {dossier.enrollment.status === "PAUSED"
+                        ? "⏸️ Đang bảo lưu"
+                        : dossier.enrollment.status === "FINISHED"
+                        ? "🏁 Đã kết thúc"
+                        : "🟢 Đang theo học"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>📞 <strong>{dossier.student.phone || "Chưa có SĐT"}</strong></span>
+                    {dossier.student.email && <span>✉️ {dossier.student.email}</span>}
+                    <span>·</span>
+                    <span>
+                      Lớp: <strong className="text-indigo-700">{dossier.enrollment.className}</strong>
+                      {dossier.enrollment.classLevel ? ` (${dossier.enrollment.classLevel})` : ""}
+                    </span>
+                    <span>·</span>
+                    <span className="text-indigo-600 font-bold bg-indigo-50/80 px-2 py-0.5 rounded-md">
+                      ✨ Gắn bó {dossier.enrollment.daysAtCenter} ngày
+                    </span>
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* DÀN CÔNG CỤ XUẤT BẢN & LIÊN LẠC */}
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintCV(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition shadow-xs"
+                  title="In hoặc xuất bản tóm tắt lý lịch học viên chuẩn A4 / PDF"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-200" />
+                  <span>In / Xuất CV</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleCopyParent}
@@ -2981,174 +3144,839 @@ function StudentDossierModal({
                   title="Sao chép link sổ liên lạc và tin nhắn Zalo gửi phụ huynh"
                 >
                   <Share2 className="w-3.5 h-3.5" />
-                  <span>Gửi Zalo PH</span>
+                  <span className="hidden sm:inline">Gửi Zalo PH</span>
                 </button>
+
+                <a
+                  href={`/p/${encodeURIComponent(
+                    dossier.student.studentCode || dossier.student.phone || dossier.student.id
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                  title="Mở Sổ Liên Lạc Điện Tử Phụ Huynh trên tab mới"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="hidden md:inline">Portal PH</span>
+                </a>
+
                 <button
                   onClick={onClose}
                   className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition"
+                  title="Đóng hồ sơ"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            {/* 4 THẺ CHỈ SỐ HỌC VIÊN */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                <span className="text-slate-500 font-semibold block text-[11px]">Bắt đầu học</span>
-                <span className="text-sm font-extrabold text-slate-900 mt-1 block">
-                  {fmtDate(dossier.enrollment.joinDate)}
-                </span>
-                <span className="text-[10px] text-indigo-600 font-bold">
-                  {dossier.enrollment.daysAtCenter} ngày gắn bó
-                </span>
+            {/* ================================================================= */}
+            {/* BENTO KPI RIBBON: 4 CHỈ SỐ TOÀN DIỆN CỦA HỌC VIÊN                 */}
+            {/* ================================================================= */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {/* CHỈ SỐ 1: HỌC LỰC & ĐÁNH GIÁ THÁNG */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/50 border border-amber-200/90 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-900 font-extrabold text-[11px] flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Học lực tháng</span>
+                  </span>
+                  {dossier.latestEvaluation?.monthYear && (
+                    <span className="text-[10px] text-amber-700 font-mono font-bold">
+                      {dossier.latestEvaluation.monthYear}
+                    </span>
+                  )}
+                </div>
+                {dossier.latestEvaluation ? (
+                  <div className="mt-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-black text-amber-900">
+                        {dossier.latestEvaluation.classification === "XUAT_SAC"
+                          ? "🏆 Xuất sắc"
+                          : dossier.latestEvaluation.classification === "GIOI"
+                          ? "🌟 Giỏi"
+                          : dossier.latestEvaluation.classification === "KHA"
+                          ? "📈 Khá"
+                          : "⚠️ Cần kèm thêm"}
+                      </span>
+                      {dossier.latestEvaluation.testScore !== null && (
+                        <span className="text-xs font-black text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded-md">
+                          {dossier.latestEvaluation.testScore}/10đ
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-amber-800 block mt-0.5 font-medium truncate">
+                      NP: {dossier.latestEvaluation.grammarScore ?? "—"} · KN: {dossier.latestEvaluation.skillsScore ?? "—"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[11px] text-amber-700 font-medium">
+                    Chưa có đánh giá tháng
+                  </div>
+                )}
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
-                <span className="text-emerald-800 font-semibold block text-[11px]">
-                  Chuyên cần ({dossier.attendanceSummary.attendanceRate}%)
+              {/* CHỈ SỐ 2: CHUYÊN CẦN */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-200/90 shadow-2xs">
+                <span className="text-emerald-900 font-extrabold block text-[11px] flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Chuyên cần ({dossier.attendanceSummary.attendanceRate}%)</span>
                 </span>
-                <span className="text-sm font-extrabold text-emerald-700 mt-1 block">
+                <span className="text-sm font-black text-emerald-800 mt-1.5 block">
                   {dossier.attendanceSummary.attendedTotal} buổi đi học
                 </span>
-                <span className="text-[10px] text-slate-500">
-                  Phép: {dossier.attendanceSummary.excusedCount} · Vắng: {dossier.attendanceSummary.absentCount}
+                <span className="text-[10px] text-emerald-700 block mt-0.5">
+                  Phép: <strong>{dossier.attendanceSummary.excusedCount}</strong> · Vắng: <strong className="text-rose-600">{dossier.attendanceSummary.absentCount}</strong>
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200">
-                <span className="text-indigo-800 font-semibold block text-[11px]">Đóng phí đến</span>
-                <span className="text-sm font-extrabold text-indigo-700 mt-1 block">
-                  {fmtDate(dossier.tuitionSummary.paidUntilDate)}
+              {/* CHỈ SỐ 3: TÌNH HÌNH BÀI TẬP VỀ NHÀ (BTVN) */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-sky-50 to-indigo-50/50 border border-sky-200/90 shadow-2xs">
+                <span className="text-sky-900 font-extrabold block text-[11px] flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Bài tập về nhà ({dossier.homeworkSummary?.rate ?? 100}%)</span>
                 </span>
-                <span className="text-[10px] text-indigo-900 font-medium">
-                  {dossier.tuitionSummary.isMonthly
-                    ? `Dùng ${dossier.attendanceSummary.usedSessions}/${dossier.attendanceSummary.targetSessions} buổi`
-                    : "Gói trọn khóa"}
+                <span className="text-sm font-black text-sky-800 mt-1.5 block">
+                  {dossier.homeworkSummary?.doneCount ?? dossier.attendanceTimeline.length}/{dossier.attendanceTimeline.length} buổi hoàn thành
+                </span>
+                <span className="text-[10px] text-sky-700 block mt-0.5">
+                  Chưa nộp: <strong>{dossier.homeworkSummary?.missedCount ?? 0} buổi</strong>
                 </span>
               </div>
 
+              {/* CHỈ SỐ 4: TIẾN ĐỘ THEO LỊCH & HỌC PHÍ */}
               <div
-                className={`p-3.5 rounded-2xl border ${
-                  dossier.tuitionSummary.totalDebt > 0
-                    ? "bg-rose-50/80 border-rose-200"
-                    : "bg-slate-50 border-slate-200/80"
+                className={`p-3.5 rounded-2xl border shadow-2xs ${
+                  dossier.attendanceSummary.remainingSessions <= 0
+                    ? "bg-rose-50/90 border-rose-200 text-rose-900"
+                    : dossier.attendanceSummary.remainingSessions <= 2
+                    ? "bg-amber-50/90 border-amber-200 text-amber-900"
+                    : "bg-indigo-50/70 border-indigo-200 text-indigo-900"
                 }`}
               >
-                <span className="text-slate-500 font-semibold block text-[11px]">Tổng đã nộp</span>
-                <span className="text-sm font-extrabold text-emerald-700 mt-1 block">
-                  {vnd(dossier.tuitionSummary.totalPaid)}
-                </span>
-                {dossier.tuitionSummary.totalDebt > 0 ? (
-                  <span className="text-[10px] font-bold text-rose-600">
-                    Nợ: {vnd(dossier.tuitionSummary.totalDebt)}
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-[11px] flex items-center gap-1">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Học phí theo lịch</span>
                   </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-emerald-600">Đã đủ 100%</span>
-                )}
+                  <span className="text-[10px] font-black uppercase tracking-wider">
+                    {dossier.attendanceSummary.remainingSessions <= 0
+                      ? "⚠️ Hết buổi"
+                      : dossier.attendanceSummary.remainingSessions <= 2
+                      ? "⚡ Sắp hết"
+                      : "✓ Đủ phí"}
+                  </span>
+                </div>
+                <span className="text-sm font-black mt-1.5 block">
+                  Còn {dossier.attendanceSummary.remainingSessions} buổi học
+                </span>
+                <span className="text-[10px] block mt-0.5">
+                  Đã nộp: <strong className="text-emerald-700">{vnd(dossier.tuitionSummary.totalPaid)}</strong>
+                  {dossier.tuitionSummary.totalDebt > 0 && (
+                    <strong className="text-rose-600 ml-1">· Nợ: {vnd(dossier.tuitionSummary.totalDebt)}</strong>
+                  )}
+                </span>
               </div>
             </div>
 
-            {dossier.enrollment.note && (
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between gap-2">
-                <div>
-                  <strong>📌 Ghi chú:</strong> {dossier.enrollment.note}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setTab("EDIT")}
-                  className="text-amber-800 font-bold underline shrink-0"
-                >
-                  Sửa
-                </button>
-              </div>
-            )}
-
-            {/* TAB SELECTOR */}
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200 text-xs font-bold">
+            {/* ================================================================= */}
+            {/* BẢNG CHUYỂN TAB CHỨC NĂNG HỒ SƠ                                  */}
+            {/* ================================================================= */}
+            <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200 text-xs font-bold overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setTab("OVERVIEW")}
+                className={`flex-1 min-w-[130px] py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
+                  tab === "OVERVIEW"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Lý lịch tóm tắt</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("EVALUATIONS")}
+                className={`flex-1 min-w-[145px] py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
+                  tab === "EVALUATIONS"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 text-amber-600" />
+                <span>Đánh giá tháng ({dossier.evaluations?.length || 0})</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setTab("ATTENDANCE")}
-                className={`flex-1 py-1.5 rounded-xl transition ${
+                className={`flex-1 min-w-[145px] py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
                   tab === "ATTENDANCE"
                     ? "bg-white text-indigo-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Buổi học & Nghỉ ({dossier.attendanceTimeline.length})
+                <CalendarDays className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Nhật ký học ({dossier.attendanceTimeline.length})</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTab("TUITION")}
-                className={`flex-1 py-1.5 rounded-xl transition ${
+                className={`flex-1 min-w-[130px] py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
                   tab === "TUITION"
                     ? "bg-white text-indigo-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Lịch sử học phí ({dossier.payments.length})
+                <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Học phí & Biên lai ({dossier.payments.length})</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTab("EDIT")}
-                className={`flex-1 py-1.5 rounded-xl transition ${
+                className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
                   tab === "EDIT"
                     ? "bg-white text-indigo-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Cập nhật thông tin
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Sửa thông tin</span>
               </button>
             </div>
 
-            {/* NỘI DUNG TỪNG TAB */}
-            {tab === "ATTENDANCE" && (
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {dossier.attendanceTimeline.length > 0 ? (
-                  dossier.attendanceTimeline.map((att: any) => (
-                    <div
-                      key={att.sessionId}
-                      className="p-3 rounded-2xl border border-slate-200/80 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <span className="font-extrabold text-slate-900 block">
-                          {fmtDate(att.date)} — {att.title}
-                        </span>
-                        {att.note && <span className="text-slate-500 text-[11px]">💬 {att.note}</span>}
+            {/* ================================================================= */}
+            {/* TAB 1: BẢN TÓM TẮT LÝ LỊCH (EXECUTIVE CV 360°)                     */}
+            {/* ================================================================= */}
+            {tab === "OVERVIEW" && (
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1 text-xs">
+                {/* KHỐI 1: SƠ YẾU LÝ LỊCH HỌC TẬP TẠI DANIELTS */}
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                      <GraduationCap className="w-4 h-4 text-indigo-600" />
+                      <span>Sơ yếu lý lịch học viên</span>
+                    </h4>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Khởi tạo ngày {fmtDate(dossier.student.createdAt || dossier.enrollment.joinDate)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Họ và tên:</span>
+                        <strong className="text-slate-900 font-extrabold">{dossier.student.name}</strong>
                       </div>
-                      <span
-                        className={`px-3 py-1 rounded-xl font-bold shrink-0 text-[11px] ${
-                          att.status === "PRESENT"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : att.status === "LATE"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : att.status === "EXCUSED"
-                            ? "bg-sky-50 text-sky-700 border border-sky-200"
-                            : "bg-rose-50 text-rose-700 border border-rose-200"
-                        }`}
-                      >
-                        {att.status === "PRESENT"
-                          ? "✓ Có mặt"
-                          : att.status === "LATE"
-                          ? "⏰ Muộn"
-                          : att.status === "EXCUSED"
-                          ? "🛡️ Có phép"
-                          : "✕ Vắng"}
-                      </span>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Mã học viên:</span>
+                        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
+                          {dossier.student.studentCode || "HV-DANIELTS"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Điện thoại liên hệ:</span>
+                        <strong className="text-slate-800">{dossier.student.phone || "Chưa cập nhật"}</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-slate-500">Email:</span>
+                        <strong className="text-slate-800">{dossier.student.email || "Chưa cập nhật"}</strong>
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center text-xs text-slate-400 py-10">
-                    Chưa có lịch sử điểm danh nào.
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Ngày nhập học chính thức:</span>
+                        <strong className="text-indigo-800 font-extrabold">{fmtDate(dossier.enrollment.joinDate)}</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Thời gian đồng hành:</span>
+                        <span className="font-bold text-emerald-700">{dossier.enrollment.daysAtCenter} ngày liên tục</span>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                        <span className="text-slate-500">Lịch học trong tuần:</span>
+                        <strong className="text-slate-800">{dossier.enrollment.scheduleText || "Theo lịch trung tâm"}</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-slate-500">Hình thức học phí:</span>
+                        <span className="font-bold text-slate-700">
+                          {dossier.enrollment.billingMode === "COURSE" ? "Gói trọn khóa" : "Theo tháng (8 buổi/tháng)"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* KHỐI 2: ĐÁNH GIÁ NĂNG LỰC & THÁI ĐỘ MỚI NHẤT */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                      <Star className="w-4 h-4 text-amber-500" />
+                      <span>Hồ sơ năng lực & Nhận xét của giáo viên</span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddEval(true);
+                        setTab("EVALUATIONS");
+                      }}
+                      className="text-indigo-600 font-bold hover:underline text-[11px]"
+                    >
+                      + Cập nhật đánh giá
+                    </button>
+                  </div>
+
+                  {dossier.latestEvaluation ? (
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-slate-600">Xếp loại tháng {dossier.latestEvaluation.monthYear}:</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black border border-amber-300">
+                          {dossier.latestEvaluation.classification === "XUAT_SAC"
+                            ? "🏆 Xuất sắc"
+                            : dossier.latestEvaluation.classification === "GIOI"
+                            ? "🌟 Giỏi"
+                            : dossier.latestEvaluation.classification === "KHA"
+                            ? "📈 Khá"
+                            : "⚠️ Cần kèm thêm"}
+                        </span>
+                        {dossier.latestEvaluation.testScore !== null && (
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                            Điểm kiểm tra: {dossier.latestEvaluation.testScore}/10đ
+                          </span>
+                        )}
+                        {dossier.latestEvaluation.grammarScore !== null && (
+                          <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold border border-teal-200">
+                            Ngữ pháp: {dossier.latestEvaluation.grammarScore}/10đ
+                          </span>
+                        )}
+                        {dossier.latestEvaluation.skillsScore !== null && (
+                          <span className="px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-bold border border-sky-200">
+                            Kỹ năng: {dossier.latestEvaluation.skillsScore}/10đ
+                          </span>
+                        )}
+                      </div>
+
+                      {/* THÁI ĐỘ & BTVN */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {dossier.latestEvaluation.attitude && (
+                          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700">
+                            <span className="font-bold block text-slate-500 text-[10px] uppercase">Thái độ học tập:</span>
+                            <span className="font-medium text-[11px] mt-0.5 block">🎯 {dossier.latestEvaluation.attitude}</span>
+                          </div>
+                        )}
+                        {dossier.latestEvaluation.homeworkStatus && (
+                          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700">
+                            <span className="font-bold block text-slate-500 text-[10px] uppercase">Tình hình làm bài tập:</span>
+                            <span className="font-medium text-[11px] mt-0.5 block">📚 {dossier.latestEvaluation.homeworkStatus}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ƯU ĐIỂM & ĐIỂM CẦN CẢI THIỆN */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {dossier.latestEvaluation.strengths && (
+                          <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-900">
+                            <span className="font-bold block text-emerald-700 text-[10px] uppercase">Ưu điểm nổi bật:</span>
+                            <span className="font-medium text-[11px] mt-0.5 block">✨ {dossier.latestEvaluation.strengths}</span>
+                          </div>
+                        )}
+                        {dossier.latestEvaluation.improvements && (
+                          <div className="p-2.5 rounded-xl bg-rose-50/70 border border-rose-200 text-rose-900">
+                            <span className="font-bold block text-rose-700 text-[10px] uppercase">Nội dung cần củng cố:</span>
+                            <span className="font-medium text-[11px] mt-0.5 block">💡 {dossier.latestEvaluation.improvements}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* LỜI NHẬN XÉT CỦA GIÁO VIÊN */}
+                      {dossier.latestEvaluation.teacherComment && (
+                        <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 text-indigo-950">
+                          <span className="font-bold block text-indigo-700 text-[10px] uppercase">Lời nhận xét gửi phụ huynh:</span>
+                          <p className="mt-1 font-medium italic text-[11px] leading-relaxed">
+                            &ldquo;{dossier.latestEvaluation.teacherComment}&rdquo;
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-slate-400">
+                      <Award className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
+                      <p className="font-medium">Chưa có bản đánh giá định kỳ nào cho học viên này.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddEval(true);
+                          setTab("EVALUATIONS");
+                        }}
+                        className="mt-2 px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-bold text-xs"
+                      >
+                        + Tạo đánh giá tháng ngay
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* KHỐI 3: LỊCH SỬ THAM GIA CÁC LỚP HỌC TẠI TRUNG TÂM */}
+                {dossier.allEnrollments && dossier.allEnrollments.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-2">
+                    <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-slate-600" />
+                      <span>Các lớp đã & đang theo học tại DanielTS</span>
+                    </h4>
+                    <div className="space-y-1.5">
+                      {dossier.allEnrollments.map((enr: any) => (
+                        <div
+                          key={enr.classId}
+                          className="p-2.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-900 block">{enr.className}</span>
+                            <span className="text-[10px] text-slate-500">
+                              Bắt đầu từ {fmtDate(enr.joinDate)} {enr.level ? `· Cấp độ ${enr.level}` : ""}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              enr.status === "ACTIVE"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {enr.status === "ACTIVE" ? "Đang học" : "Đã xong"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* KHỐI 4: GHI CHÚ QUẢN LÝ RIÊNG */}
+                {dossier.enrollment.note && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start justify-between gap-2">
+                    <div>
+                      <strong className="block text-[11px] font-bold uppercase text-amber-800 mb-0.5">
+                        📌 Ghi chú lưu vết của trung tâm:
+                      </strong>
+                      <p className="font-medium">{dossier.enrollment.note}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTab("EDIT")}
+                      className="text-amber-800 font-bold underline shrink-0 text-xs ml-2"
+                    >
+                      Sửa
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
+            {/* ================================================================= */}
+            {/* TAB 2: ĐÁNH GIÁ & XẾP LOẠI ĐỊNH KỲ (MONTHLY REPORT CARDS)         */}
+            {/* ================================================================= */}
+            {tab === "EVALUATIONS" && (
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1 text-xs">
+                {/* THANH CÔNG CỤ ĐÁNH GIÁ */}
+                <div className="flex items-center justify-between bg-amber-50/70 p-3 rounded-2xl border border-amber-200">
+                  <div>
+                    <h4 className="font-extrabold text-amber-900">
+                      Sổ theo dõi học lực & xếp loại định kỳ hàng tháng
+                    </h4>
+                    <p className="text-[11px] text-amber-700">
+                      Áp dụng thang điểm 10 chuẩn cho học sinh phổ thông (không theo band điểm IELTS).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddEval(!showAddEval)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition flex items-center gap-1 shadow-xs shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{showAddEval ? "Đóng form" : "Thêm đánh giá tháng"}</span>
+                  </button>
+                </div>
+
+                {/* FORM THÊM / CẬP NHẬT ĐÁNH GIÁ THÁNG */}
+                {showAddEval && (
+                  <form
+                    onSubmit={handleSaveEvaluation}
+                    className="p-4 rounded-2xl bg-white border-2 border-amber-300 shadow-md space-y-3.5 animate-in fade-in duration-150"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="font-black text-slate-800 flex items-center gap-1.5">
+                        <Award className="w-4 h-4 text-amber-600" />
+                        <span>Phiếu đánh giá định kỳ cho học sinh {dossier.student.name}</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddEval(false)}
+                        className="text-slate-400 hover:text-slate-600 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Tháng đánh giá</label>
+                        <input
+                          type="month"
+                          className={dInput}
+                          required
+                          value={evalMonth}
+                          onChange={(e) => setEvalMonth(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Phân loại học lực</label>
+                        <select
+                          className={dInput}
+                          value={evalClassification}
+                          onChange={(e) => setEvalClassification(e.target.value as any)}
+                        >
+                          <option value="XUAT_SAC">🏆 Xuất sắc (9.0 - 10)</option>
+                          <option value="GIOI">🌟 Giỏi (8.0 - 8.9)</option>
+                          <option value="KHA">📈 Khá (6.5 - 7.9)</option>
+                          <option value="CAN_KEM">⚠️ Cần kèm thêm (&lt; 6.5)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 3 ĐIỂM SỐ THANG 10 */}
+                    <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div>
+                        <label className="font-bold text-slate-700 block text-[11px] mb-1">
+                          Điểm Test (0-10)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="10"
+                          className={dInput}
+                          placeholder="8.5"
+                          value={evalTestScore}
+                          onChange={(e) => setEvalTestScore(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block text-[11px] mb-1">
+                          Ngữ pháp & TV (0-10)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="10"
+                          className={dInput}
+                          placeholder="8.0"
+                          value={evalGrammarScore}
+                          onChange={(e) => setEvalGrammarScore(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block text-[11px] mb-1">
+                          Kỹ năng N-N-Đ (0-10)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="10"
+                          className={dInput}
+                          placeholder="8.5"
+                          value={evalSkillsScore}
+                          onChange={(e) => setEvalSkillsScore(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Thái độ học tập</label>
+                        <input
+                          className={dInput}
+                          value={evalAttitude}
+                          onChange={(e) => setEvalAttitude(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Tình hình làm BTVN</label>
+                        <input
+                          className={dInput}
+                          value={evalHomeworkStatus}
+                          onChange={(e) => setEvalHomeworkStatus(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Ưu điểm nổi bật</label>
+                        <input
+                          className={dInput}
+                          value={evalStrengths}
+                          onChange={(e) => setEvalStrengths(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Kiến thức cần củng cố</label>
+                        <input
+                          className={dInput}
+                          value={evalImprovements}
+                          onChange={(e) => setEvalImprovements(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Nhận xét chi tiết của giáo viên gửi phụ huynh
+                      </label>
+                      <textarea
+                        rows={2}
+                        className={dInput}
+                        value={evalTeacherComment}
+                        onChange={(e) => setEvalTeacherComment(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddEval(false)}
+                        className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={evalSaving}
+                        className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                      >
+                        {evalSaving ? "Đang lưu..." : "Lưu đánh giá tháng"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* DANH SÁCH CÁC THÁNG ĐÃ ĐÁNH GIÁ */}
+                <div className="space-y-3">
+                  {dossier.evaluations && dossier.evaluations.length > 0 ? (
+                    dossier.evaluations.map((ev: any) => (
+                      <div
+                        key={ev.id}
+                        className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-2.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-900 text-sm">
+                              Tháng {ev.monthYear}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-xs border border-amber-300">
+                              {ev.classification === "XUAT_SAC"
+                                ? "🏆 Xuất sắc"
+                                : ev.classification === "GIOI"
+                                ? "🌟 Giỏi"
+                                : ev.classification === "KHA"
+                                ? "📈 Khá"
+                                : "⚠️ Cần kèm"}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            Cập nhật: {fmtDate(ev.updatedAt || ev.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* 3 ĐIỂM SỐ */}
+                        <div className="grid grid-cols-3 gap-2 py-1 text-center font-bold">
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span className="text-[10px] text-slate-500 block">Kiểm tra tháng</span>
+                            <span className="text-sm font-black text-indigo-700">
+                              {ev.testScore !== null ? `${ev.testScore}/10đ` : "—"}
+                            </span>
+                          </div>
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span className="text-[10px] text-slate-500 block">Ngữ pháp & Từ vựng</span>
+                            <span className="text-sm font-black text-teal-700">
+                              {ev.grammarScore !== null ? `${ev.grammarScore}/10đ` : "—"}
+                            </span>
+                          </div>
+                          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span className="text-[10px] text-slate-500 block">Kỹ năng Nghe-Nói-Đọc</span>
+                            <span className="text-sm font-black text-sky-700">
+                              {ev.skillsScore !== null ? `${ev.skillsScore}/10đ` : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CHI TIẾT */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-700">
+                          {ev.attitude && (
+                            <div>
+                              <strong className="text-slate-500">Thái độ:</strong> {ev.attitude}
+                            </div>
+                          )}
+                          {ev.homeworkStatus && (
+                            <div>
+                              <strong className="text-slate-500">BTVN:</strong> {ev.homeworkStatus}
+                            </div>
+                          )}
+                          {ev.strengths && (
+                            <div className="text-emerald-800">
+                              <strong>Ưu điểm:</strong> {ev.strengths}
+                            </div>
+                          )}
+                          {ev.improvements && (
+                            <div className="text-rose-700">
+                              <strong>Cần củng cố:</strong> {ev.improvements}
+                            </div>
+                          )}
+                        </div>
+
+                        {ev.teacherComment && (
+                          <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200 text-indigo-950 text-[11px] italic">
+                            &ldquo;{ev.teacherComment}&rdquo;
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-12 text-center text-slate-400">
+                      Chưa có dữ liệu đánh giá tháng nào. Bấm nút <strong>&quot;Thêm đánh giá tháng&quot;</strong> ở trên để lưu nhận xét đầu tiên!
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* TAB 3: NHẬT KÝ ĐIỂM DANH & BUỔI HỌC (ATTENDANCE TIMELINE)         */}
+            {/* ================================================================= */}
+            {tab === "ATTENDANCE" && (
+              <div className="space-y-3.5 max-h-[55vh] overflow-y-auto pr-1 text-xs">
+                {/* THANH LỌC NHANH */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+                  <div className="text-[11px] text-slate-600 font-bold">
+                    Tổng số buổi ghi nhận: <strong className="text-indigo-700">{dossier.attendanceTimeline.length}</strong> buổi
+                    (Có mặt: <strong>{dossier.attendanceSummary.presentCount}</strong> · Muộn: <strong>{dossier.attendanceSummary.lateCount}</strong> · Phép: <strong>{dossier.attendanceSummary.excusedCount}</strong> · Vắng: <strong className="text-rose-600">{dossier.attendanceSummary.absentCount}</strong>)
+                  </div>
+                  <div className="flex items-center gap-1 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAttFilter("ALL")}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        attFilter === "ALL" ? "bg-indigo-600 text-white" : "bg-white text-slate-700 border border-slate-200"
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttFilter("ABSENT")}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        attFilter === "ABSENT" ? "bg-rose-600 text-white" : "bg-white text-slate-700 border border-slate-200"
+                      }`}
+                    >
+                      Nghỉ / Vắng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttFilter("HOMEWORK_MISSING")}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        attFilter === "HOMEWORK_MISSING" ? "bg-amber-600 text-white" : "bg-white text-slate-700 border border-slate-200"
+                      }`}
+                    >
+                      Chưa nộp BTVN
+                    </button>
+                  </div>
+                </div>
+
+                {/* DANH SÁCH BUỔI HỌC */}
+                <div className="space-y-2">
+                  {filteredTimeline.length > 0 ? (
+                    filteredTimeline.map((att: any) => (
+                      <div
+                        key={att.sessionId}
+                        className="p-3.5 rounded-2xl border border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs hover:border-slate-300 transition"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-slate-900 text-xs">
+                              {fmtDate(att.date)}
+                            </span>
+                            <span className="text-slate-400">·</span>
+                            <span className="font-bold text-slate-700 truncate">{att.title}</span>
+                          </div>
+                          {att.topic && (
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              📖 Chủ đề: <strong>{att.topic}</strong>
+                            </p>
+                          )}
+                          {att.note && (
+                            <p className="text-[11px] text-indigo-700 mt-0.5 italic">
+                              💬 Nhận xét: &ldquo;{att.note}&rdquo;
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                          {/* TRẠNG THÁI BTVN */}
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              att.homeworkDone !== false
+                                ? "bg-teal-50 text-teal-700 border border-teal-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {att.homeworkDone !== false ? "✓ BTVN" : "✕ Chưa BTVN"}
+                          </span>
+
+                          {/* TRẠNG THÁI ĐIỂM DANH */}
+                          <span
+                            className={`px-3 py-1 rounded-xl font-black text-[11px] ${
+                              att.status === "PRESENT"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : att.status === "LATE"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : att.status === "EXCUSED"
+                                ? "bg-sky-50 text-sky-700 border border-sky-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {att.status === "PRESENT"
+                              ? "✓ Có mặt"
+                              : att.status === "LATE"
+                              ? "⏰ Đi trễ"
+                              : att.status === "EXCUSED"
+                              ? "🛡️ Nghỉ có phép"
+                              : "✕ Vắng"}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-xs text-slate-400 py-12">
+                      Không có buổi học nào phù hợp với bộ lọc hiện tại.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* TAB 4: LỊCH SỬ HỌC PHÍ & BIÊN LAI THU TIỀN                        */}
+            {/* ================================================================= */}
             {tab === "TUITION" && (
-              <div className="space-y-4 max-h-72 overflow-y-auto pr-1 text-xs">
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1 text-xs">
+                {/* TÓM TẮT CHU KỲ */}
                 <div>
-                  <h4 className="font-bold text-slate-700 mb-2">Chu kỳ áp dụng</h4>
+                  <h4 className="font-bold text-slate-700 mb-2 flex items-center justify-between">
+                    <span>Chu kỳ nộp học phí áp dụng</span>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      Tiêu chuẩn: {dossier.enrollment.pricePerSession ? `${vnd(dossier.enrollment.pricePerSession)}/buổi` : "125.000đ/buổi"}
+                    </span>
+                  </h4>
                   <div className="space-y-2">
                     {dossier.cycles.map((cy: any) => (
                       <div
@@ -3156,19 +3984,21 @@ function StudentDossierModal({
                         className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80 flex flex-wrap items-center justify-between gap-2"
                       >
                         <div>
-                          <span className="font-extrabold text-slate-900 block">
+                          <span className="font-extrabold text-slate-900 block text-sm">
                             {cy.cycleName} ({cy.expectedSessions} buổi)
                           </span>
                           <span className="text-slate-500 text-[11px]">
-                            {fmtDate(cy.periodStart)} → {fmtDate(cy.periodEnd)}
+                            Thời gian: {fmtDate(cy.periodStart)} → {fmtDate(cy.periodEnd)}
                           </span>
                         </div>
                         <div className="text-right">
                           <span className="font-black text-emerald-700 text-sm block">
                             {vnd(cy.paidAmount)} / {vnd(cy.totalAmount - cy.discountAmount)}
                           </span>
-                          {cy.debt > 0 && (
+                          {cy.debt > 0 ? (
                             <span className="text-rose-600 font-bold text-[11px]">Còn nợ {vnd(cy.debt)}</span>
+                          ) : (
+                            <span className="text-emerald-600 font-bold text-[11px]">✓ Đã đóng đủ</span>
                           )}
                         </div>
                       </div>
@@ -3176,25 +4006,28 @@ function StudentDossierModal({
                   </div>
                 </div>
 
+                {/* DANH SÁCH CÁC PHIẾU THU TIỀN (BIÊN LAI ĐIỆN TỬ) */}
                 <div>
-                  <h4 className="font-bold text-slate-700 mb-2">Lịch sử các lần nộp</h4>
+                  <h4 className="font-bold text-slate-700 mb-2">Lịch sử các lần nộp học phí (Biên lai)</h4>
                   {dossier.payments.length > 0 ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {dossier.payments.map((p: any) => (
                         <div
                           key={p.id}
-                          className="p-3 rounded-2xl border border-slate-200/80 flex items-center justify-between"
+                          className="p-3.5 rounded-2xl border border-slate-200/80 bg-white flex items-center justify-between shadow-2xs"
                         >
                           <div>
-                            <span className="font-bold text-slate-800">{fmtDate(p.paidAt)}</span>
-                            <span className="text-slate-400 mx-1">·</span>
-                            <span className="text-indigo-600 font-bold">
-                              {p.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản"}
-                            </span>
-                            {p.note && <span className="text-slate-500 block text-[11px]">{p.note}</span>}
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800 text-sm">{fmtDate(p.paidAt)}</span>
+                              <span className="text-slate-400">·</span>
+                              <span className="text-indigo-600 font-bold text-xs">
+                                {p.paymentMethod === "CASH" ? "💵 Tiền mặt" : "💳 Chuyển khoản VietQR"}
+                              </span>
+                            </div>
+                            {p.note && <span className="text-slate-500 block text-[11px] mt-0.5">{p.note}</span>}
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="font-black text-emerald-700 text-sm">+{vnd(p.amount)}</span>
+                            <span className="font-black text-emerald-700 text-base">+{vnd(p.amount)}</span>
                             <button
                               type="button"
                               onClick={() => handleDeletePayment(p)}
@@ -3208,61 +4041,103 @@ function StudentDossierModal({
                       ))}
                     </div>
                   ) : (
-                    <div className="text-slate-400 text-xs">Chưa có giao dịch nạp tiền nào.</div>
+                    <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      Chưa có giao dịch nạp học phí nào được ghi nhận.
+                    </div>
                   )}
                 </div>
               </div>
             )}
 
+            {/* ================================================================= */}
+            {/* TAB 5: CẬP NHẬT THÔNG TIN HỌC VIÊN                                */}
+            {/* ================================================================= */}
             {tab === "EDIT" && (
-              <form onSubmit={handleSaveProfile} className="space-y-3.5 text-xs">
+              <form onSubmit={handleSaveProfile} className="space-y-3.5 text-xs max-h-[55vh] overflow-y-auto pr-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Họ tên học viên</label>
+                    <label className="font-bold text-slate-700 block mb-1">Họ tên học viên *</label>
                     <input
-                      className={inputCls}
+                      className={dInput}
                       required
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="font-bold text-slate-700 block mb-1">Số điện thoại</label>
+                    <label className="font-bold text-slate-700 block mb-1">Số điện thoại liên hệ</label>
                     <input
-                      className={inputCls}
+                      className={dInput}
+                      placeholder="0912345678"
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Ngày bắt đầu học</label>
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={editJoinDate}
-                    onChange={(e) => setEditJoinDate(e.target.value)}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Mã học viên (Student Code)</label>
+                    <input
+                      className={dInput}
+                      placeholder="HV001"
+                      value={editStudentCode}
+                      onChange={(e) => setEditStudentCode(e.target.value.toUpperCase())}
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Email học viên / Phụ huynh</label>
+                    <input
+                      type="email"
+                      className={dInput}
+                      placeholder="hocvien@gmail.com"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Ngày bắt đầu vào học</label>
+                    <input
+                      type="date"
+                      className={dInput}
+                      value={editJoinDate}
+                      onChange={(e) => setEditJoinDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Trạng thái học viên</label>
+                    <select
+                      className={dInput}
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                    >
+                      <option value="ACTIVE">🟢 Đang theo học bình thường</option>
+                      <option value="PAUSED">⏸️ Tạm bảo lưu học phí</option>
+                      <option value="FINISHED">🏁 Đã hoàn thành khóa / Đã nghỉ</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    Ghi chú quá trình học tập & học phí
+                    Ghi chú hồ sơ học viên (Mục tiêu, đặc điểm tính cách, thỏa thuận riêng...)
                   </label>
                   <textarea
                     rows={3}
-                    className={inputCls}
+                    className={dInput}
                     placeholder="Mục tiêu band điểm, nhận xét giáo viên, tình trạng học phí..."
                     value={editNote}
                     onChange={(e) => setEditNote(e.target.value)}
                   />
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setTab("ATTENDANCE")}
+                    onClick={() => setTab("OVERVIEW")}
                     className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700"
                   >
                     Hủy
@@ -3272,7 +4147,7 @@ function StudentDossierModal({
                     disabled={saving}
                     className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
                   >
-                    {saving ? "Đang lưu..." : "Lưu thay đổi"}
+                    {saving ? "Đang lưu..." : "Lưu thay đổi hồ sơ"}
                   </button>
                 </div>
               </form>
@@ -3280,6 +4155,172 @@ function StudentDossierModal({
           </>
         )}
       </div>
+
+      {/* ===================================================================== */}
+      {/* MODAL XEM TRƯỚC VÀ IN BẢN TÓM TẮT LÝ LỊCH HỌC VIÊN CHUẨN A4 / PDF       */}
+      {/* ===================================================================== */}
+      {showPrintCV && dossier && (
+        <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-start p-2 sm:p-6 overflow-y-auto print:p-0 print:bg-white">
+          {/* THANH ĐIỀU KHIỂN IN */}
+          <div className="w-full max-w-3xl flex items-center justify-between bg-slate-900 text-white px-5 py-3 rounded-2xl mb-4 print:hidden shadow-xl border border-slate-800">
+            <div className="flex items-center gap-2">
+              <Printer className="w-4 h-4 text-indigo-400" />
+              <span className="font-bold text-xs sm:text-sm">Bản xem trước Sổ Lý Lịch Học Viên chuẩn A4</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>In ra giấy / Lưu PDF (Ctrl + P)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPrintCV(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* TRANG GIẤY A4 TRẮNG TINH KHÔI */}
+          <div className="bg-white text-slate-900 w-full max-w-3xl p-8 sm:p-10 rounded-2xl shadow-2xl print:shadow-none print:w-full print:max-w-none print:p-0 border border-slate-200 print:border-none space-y-6">
+            {/* HEADER IN */}
+            <div className="flex items-start justify-between border-b-2 border-indigo-900 pb-4">
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-indigo-900 block">
+                  TRUNG TÂM ANH NGỮ DANIELTS
+                </span>
+                <span className="text-[11px] text-slate-500 block">
+                  Hệ thống Quản lý Đào tạo &amp; Hồ sơ Học viên Điện tử (danielts.nextband.vn)
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-bold text-slate-600 block">
+                  Mã hồ sơ: <strong className="font-mono text-indigo-900">{dossier.student.studentCode || `DTS-${dossier.student.id.slice(-4).toUpperCase()}`}</strong>
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Ngày trích xuất: {new Date().toLocaleDateString("vi-VN")}
+                </span>
+              </div>
+            </div>
+
+            {/* TIÊU ĐỀ HỒ SƠ */}
+            <div className="text-center py-2">
+              <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">
+                SỔ LÝ LỊCH HỌC TẬP &amp; RÈN LUYỆN TOÀN DIỆN
+              </h2>
+              <p className="text-xs text-slate-500 uppercase tracking-widest mt-1">
+                STUDENT COMPREHENSIVE DOSSIER &amp; PERFORMANCE RECORD
+              </p>
+            </div>
+
+            {/* MỤC 1: THÔNG TIN HỌC VIÊN */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-900 border-b border-indigo-100 pb-1">
+                1. Thông tin học viên &amp; Khóa học
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                <div>Họ và tên: <strong className="text-sm font-black text-slate-900">{dossier.student.name}</strong></div>
+                <div>Mã số học viên: <strong className="font-mono text-indigo-800">{dossier.student.studentCode || "DTS-HV"}</strong></div>
+                <div>Điện thoại: <strong>{dossier.student.phone || "—"}</strong></div>
+                <div>Lớp đang theo học: <strong>{dossier.enrollment.className}</strong></div>
+                <div>Ngày nhập học chính thức: <strong>{fmtDate(dossier.enrollment.joinDate)}</strong></div>
+                <div>Thời gian gắn bó: <strong>{dossier.enrollment.daysAtCenter} ngày</strong></div>
+              </div>
+            </div>
+
+            {/* MỤC 2: CHUYÊN CẦN & BTVN */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-900 border-b border-indigo-100 pb-1">
+                2. Báo cáo Chuyên cần &amp; Ý thức làm bài tập
+              </h3>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Tỉ lệ chuyên cần</span>
+                  <span className="text-base font-black text-emerald-700">{dossier.attendanceSummary.attendanceRate}%</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Số buổi đi học</span>
+                  <span className="text-base font-black text-slate-800">{dossier.attendanceSummary.attendedTotal} buổi</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Nghỉ có phép / Vắng</span>
+                  <span className="text-base font-black text-slate-800">{dossier.attendanceSummary.excusedCount} / {dossier.attendanceSummary.absentCount}</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Hoàn thành BTVN</span>
+                  <span className="text-base font-black text-teal-700">{dossier.homeworkSummary?.rate ?? 100}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* MỤC 3: ĐÁNH GIÁ ĐỊNH KỲ THÁNG GẦN NHẤT */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-900 border-b border-indigo-100 pb-1">
+                3. Đánh giá &amp; Xếp loại học lực định kỳ (Thang điểm 10 phổ thông)
+              </h3>
+              {dossier.latestEvaluation ? (
+                <div className="border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-bold">
+                    <span>Tháng đánh giá: {dossier.latestEvaluation.monthYear}</span>
+                    <span className="font-black text-indigo-900 uppercase">
+                      Xếp loại: {dossier.latestEvaluation.classification === "XUAT_SAC" ? "Xuất sắc" : dossier.latestEvaluation.classification === "GIOI" ? "Giỏi" : dossier.latestEvaluation.classification === "KHA" ? "Khá" : "Cần kèm thêm"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 py-1 text-center font-bold">
+                    <div className="p-1.5 bg-slate-50 rounded">Điểm kiểm tra: {dossier.latestEvaluation.testScore ?? "—"}/10</div>
+                    <div className="p-1.5 bg-slate-50 rounded">Ngữ pháp: {dossier.latestEvaluation.grammarScore ?? "—"}/10</div>
+                    <div className="p-1.5 bg-slate-50 rounded">Kỹ năng: {dossier.latestEvaluation.skillsScore ?? "—"}/10</div>
+                  </div>
+                  {dossier.latestEvaluation.strengths && (
+                    <div><strong>Ưu điểm nổi bật:</strong> {dossier.latestEvaluation.strengths}</div>
+                  )}
+                  {dossier.latestEvaluation.improvements && (
+                    <div><strong>Nội dung cần củng cố:</strong> {dossier.latestEvaluation.improvements}</div>
+                  )}
+                  {dossier.latestEvaluation.teacherComment && (
+                    <div className="italic text-slate-700 pt-1 border-t border-slate-100">
+                      <strong>Nhận xét của giáo viên:</strong> &ldquo;{dossier.latestEvaluation.teacherComment}&rdquo;
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic">Chưa có bản đánh giá định kỳ.</div>
+              )}
+            </div>
+
+            {/* MỤC 4: HỌC PHÍ */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-indigo-900 border-b border-indigo-100 pb-1">
+                4. Tình trạng học phí &amp; Số buổi còn lại
+              </h3>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>Tổng học phí đã nộp: <strong>{vnd(dossier.tuitionSummary.totalPaid)}</strong></div>
+                <div>Số buổi đã qua theo lịch: <strong>{dossier.attendanceSummary.usedSessions} buổi</strong></div>
+                <div>Số buổi học còn lại: <strong className="text-indigo-900 font-black">{dossier.attendanceSummary.remainingSessions} buổi</strong></div>
+              </div>
+            </div>
+
+            {/* CHỮ KÝ XÁC NHẬN */}
+            <div className="grid grid-cols-2 pt-6 text-center text-xs">
+              <div>
+                <span className="font-extrabold uppercase block text-slate-700">GIÁO VIÊN CHỦ NHIỆM</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">(Ký và ghi rõ họ tên)</span>
+                <div className="h-16" />
+              </div>
+              <div>
+                <span className="font-extrabold uppercase block text-slate-700">TRUNG TÂM ANH NGỮ DANIELTS</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">(Ký duyệt và đóng dấu)</span>
+                <div className="h-16" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
