@@ -20,6 +20,8 @@ import {
   Sparkles,
   ArrowRight,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   TrendingUp,
   Receipt,
   FileText,
@@ -1450,6 +1452,11 @@ function ClassView({
   const [teacherNote, setTeacherNote] = useState("");
   const [showLessonPlan, setShowLessonPlan] = useState(false);
   const [editingNoteFor, setEditingNoteFor] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Tự động chọn buổi hôm nay hoặc buổi chưa điểm danh đầu tiên
   useEffect(() => {
@@ -2310,8 +2317,49 @@ Trân trọng cảm ơn Quý phụ huynh!`;
         )}
       </div>
 
-      {/* DANH SÁCH THẺ HỌC VIÊN */}
-      <div className="space-y-3">
+      {/* DANH SÁCH THẺ HỌC VIÊN TINH GỌN (PROGRESSIVE DISCLOSURE) */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-medium">
+          <span>
+            Hiển thị <strong>{
+              detail.students.filter((s) => {
+                const st = s.status || "ACTIVE";
+                if (statusFilter === "ALL") return true;
+                if (statusFilter === "EXPIRING") {
+                  return st === "ACTIVE" && isMonthly && s.paidSessions > 0 && s.remainingSessions <= 2;
+                }
+                return st === statusFilter;
+              }).length
+            }</strong> học viên
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const allOpen = Object.values(expandedIds).some(Boolean);
+              if (allOpen) {
+                setExpandedIds({});
+              } else {
+                const next: Record<string, boolean> = {};
+                detail.students.forEach((s) => {
+                  next[s.studentId] = true;
+                });
+                setExpandedIds(next);
+              }
+            }}
+            className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline"
+          >
+            {Object.values(expandedIds).some(Boolean) ? (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" /> Thu gọn tất cả
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3.5 h-3.5" /> Mở rộng chi tiết tất cả
+              </>
+            )}
+          </button>
+        </div>
+
         {detail.students
           .filter((s) => {
             const st = s.status || "ACTIVE";
@@ -2321,386 +2369,411 @@ Trân trọng cảm ơn Quý phụ huynh!`;
             }
             return st === statusFilter;
           })
-          .map((s) => {
-          const debt = s.tuition?.debt || 0;
-          const noPaidYet = !s.tuition || s.tuition.paid === 0;
-          const isExpiredOrOver =
-            isMonthly && s.paidSessions > 0 && s.remainingSessions <= 0;
-          const isExpiringSoon =
-            isMonthly &&
-            s.paidSessions > 0 &&
-            s.remainingSessions > 0 &&
-            s.remainingSessions <= 2;
+          .map((s, idx) => {
+            const isExpanded = !!expandedIds[s.studentId];
+            const debt = s.tuition?.debt || 0;
+            const noPaidYet = !s.tuition || s.tuition.paid === 0;
+            const isExpiredOrOver =
+              isMonthly && s.paidSessions > 0 && s.remainingSessions <= 0;
+            const isExpiringSoon =
+              isMonthly &&
+              s.paidSessions > 0 &&
+              s.remainingSessions > 0 &&
+              s.remainingSessions <= 2;
 
-          return (
-            <div
-              key={s.studentId}
-              className={`bg-white rounded-3xl border p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4 card-hover-effect transition-all ${
-                s.status === "PAUSED"
-                  ? "border-amber-200/80 bg-amber-50/20"
-                  : s.status === "FINISHED"
-                  ? "border-slate-200 opacity-60 bg-slate-50/40"
-                  : debt > 0 || isExpiredOrOver || noPaidYet
-                  ? "border-rose-300 bg-rose-50/15 hover:border-rose-400"
-                  : isExpiringSoon
-                  ? "border-amber-300 bg-amber-50/25 hover:border-amber-400"
-                  : "border-slate-200/80 hover:border-indigo-200"
-              }`}
-            >
-              {/* TRÁI: AVATAR & THÔNG TIN HỌC VIÊN & CẢNH BÁO */}
-              <div className="min-w-0 lg:w-5/12 flex items-start gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0 mt-0.5">
-                  {s.name
-                    .split(" ")
-                    .filter(Boolean)
-                    .slice(-2)
-                    .map((w) => w[0]?.toUpperCase())
-                    .join("") || "HV"}
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDossierStudentId(s.studentId)}
-                      className="font-extrabold text-slate-900 hover:text-indigo-600 transition text-base text-left flex items-center gap-1.5 group"
-                      title="Bấm để xem toàn bộ hồ sơ học viên"
-                    >
-                      <span>{s.name}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200/60 group-hover:bg-indigo-600 group-hover:text-white transition">
-                        Hồ sơ ↗
-                      </span>
-                    </button>
-
-                    <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
-                      {s.studentCode || `DTS-${s.studentId.slice(-4).toUpperCase()}`}
+            return (
+              <div
+                key={s.studentId}
+                className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
+                  s.status === "PAUSED"
+                    ? "border-amber-200/80 bg-amber-50/10"
+                    : s.status === "FINISHED"
+                    ? "border-slate-200 opacity-60 bg-slate-50/40"
+                    : isExpiredOrOver || debt > 0 || noPaidYet
+                    ? "border-rose-300/80 hover:border-rose-400"
+                    : isExpiringSoon
+                    ? "border-amber-300/80 hover:border-amber-400"
+                    : "border-slate-200/80 hover:border-indigo-200"
+                }`}
+              >
+                {/* HÀNG TINH GỌN (COMPACT ROW - 1 DÒNG DUY NHẤT ĐỂ ĐIỂM DANH NHANH) */}
+                <div className="p-3 sm:px-4 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                  {/* TRÁI: STT + AVATAR + TÊN + MÃ + HUY HIỆU GỌN GÀNG (CLICK ĐỂ MỞ RỘNG) */}
+                  <div
+                    onClick={() => toggleExpand(s.studentId)}
+                    className="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1 group"
+                    title="Bấm để xem thêm thông tin chi tiết của học viên"
+                  >
+                    <span className="text-xs font-bold text-slate-400 w-4 text-right font-mono shrink-0">
+                      {idx + 1}
                     </span>
 
-                    {/* CHỌN TRẠNG THÁI HỌC VIÊN */}
-                    <select
-                      value={s.status || "ACTIVE"}
-                      onChange={(e) => handleUpdateStudentStatus(s, e.target.value as any)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border transition cursor-pointer ${
-                        (s.status || "ACTIVE") === "ACTIVE"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : s.status === "PAUSED"
-                          ? "bg-amber-50 text-amber-800 border-amber-300"
-                          : "bg-slate-100 text-slate-600 border-slate-300"
-                      }`}
-                      title="Chuyển trạng thái: Đang học / Bảo lưu / Đã nghỉ"
-                    >
-                      <option value="ACTIVE">🟢 Đang học</option>
-                      <option value="PAUSED">⏸️ Bảo lưu</option>
-                      <option value="FINISHED">🏁 Đã nghỉ</option>
-                    </select>
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                      {s.name
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(-2)
+                        .map((w) => w[0]?.toUpperCase())
+                        .join("") || "HV"}
+                    </div>
 
-                    {/* HUY HIỆU ĐÁNH GIÁ & PHÂN LOẠI THÁNG */}
-                    {s.latestEvaluation ? (
-                      <button
-                        type="button"
-                        onClick={() => setEvaluationFor(s)}
-                        className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border transition flex items-center gap-1 ${
-                          s.latestEvaluation.classification === "XUAT_SAC"
-                            ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
-                            : s.latestEvaluation.classification === "GIOI"
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
-                            : s.latestEvaluation.classification === "KHA"
-                            ? "bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100"
-                            : "bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100"
-                        }`}
-                        title={`Đánh giá tháng ${s.latestEvaluation.monthYear}: Bấm để xem / sửa`}
-                      >
-                        <span>
-                          {s.latestEvaluation.classification === "XUAT_SAC"
-                            ? "🏆 Xuất sắc"
-                            : s.latestEvaluation.classification === "GIOI"
-                            ? "🌟 Giỏi"
-                            : s.latestEvaluation.classification === "KHA"
-                            ? "📈 Khá"
-                            : "⚠️ Cần kèm"}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors text-sm truncate">
+                          {s.name}
                         </span>
-                        {s.latestEvaluation.testScore !== null && s.latestEvaluation.testScore !== undefined && (
-                          <span className="font-mono">({s.latestEvaluation.testScore}đ)</span>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEvaluationFor(s)}
-                        className="px-2 py-0.5 rounded-lg text-[10px] font-bold border border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 transition flex items-center gap-1"
-                        title="Bấm để đánh giá & xếp loại định kỳ tháng"
-                      >
-                        <Star className="w-3 h-3 text-amber-500" />
-                        <span>Đánh giá tháng</span>
-                      </button>
-                    )}
 
-                    {s.phone && (
-                      <span className="text-xs text-slate-400 font-medium">· {s.phone}</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveStudent(s)}
-                      title="Xóa học viên khỏi lớp"
-                      className="ml-auto text-slate-300 hover:text-rose-600 p-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                          {s.studentCode || `DTS-${s.studentId.slice(-4).toUpperCase()}`}
+                        </span>
+
+                        {/* HUY HIỆU HỌC PHÍ GỌN GÀNG 1 DÒNG */}
+                        {s.status === "PAUSED" ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            ⏸️ Bảo lưu
+                          </span>
+                        ) : s.status === "FINISHED" ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            🏁 Đã nghỉ
+                          </span>
+                        ) : isExpiredOrOver ? (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-rose-600" />
+                            {s.remainingSessions === 0 ? "Hết buổi" : `Lố ${Math.abs(s.remainingSessions)}b`}
+                          </span>
+                        ) : isExpiringSoon ? (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Còn {s.remainingSessions} buổi
+                          </span>
+                        ) : debt > 0 ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                            Nợ {vnd(debt)}
+                          </span>
+                        ) : noPaidYet ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                            Chưa nộp
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            ✓ Còn {s.remainingSessions} buổi
+                          </span>
+                        )}
+
+                        {/* ICON ĐÁNH GIÁ THÁNG */}
+                        {s.latestEvaluation && (
+                          <span
+                            className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200"
+                            title={`Đánh giá tháng ${s.latestEvaluation.monthYear}: ${s.latestEvaluation.classification}`}
+                          >
+                            {s.latestEvaluation.classification === "XUAT_SAC"
+                              ? "🏆 Xuất sắc"
+                              : s.latestEvaluation.classification === "GIOI"
+                              ? "🌟 Giỏi"
+                              : s.latestEvaluation.classification === "KHA"
+                              ? "📈 Khá"
+                              : "⚠️ Cần kèm"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* NÚT BẤM XEM THÊM CHI TIẾT */}
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 group-hover:text-indigo-800 bg-indigo-50/70 group-hover:bg-indigo-100 px-2 py-0.5 rounded-lg transition shrink-0 ml-auto md:ml-0">
+                      <span>{isExpanded ? "Thu gọn" : "Chi tiết"}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                    </div>
                   </div>
 
-                  {isMonthly ? (
-                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span>
-                        Đã qua theo lịch: <strong className="text-slate-900">{s.usedSessions}/{s.targetSessions} buổi</strong>
-                      </span>
-                      <span className="text-slate-300">·</span>
-                      <span>Đi học: <strong>{s.attended}</strong></span>
-                      {s.absentUnexcused > 0 && (
-                        <span className="text-rose-600 font-bold">· Vắng: {s.absentUnexcused}</span>
-                      )}
-                      {s.excused > 0 && (
-                        <span className="text-sky-700 font-bold">· Có phép: {s.excused}</span>
-                      )}
-                      <span className="text-slate-300">·</span>
-                      <span className={`px-2 py-0.5 rounded-md font-extrabold ${
-                        s.remainingSessions <= 0
-                          ? "bg-rose-100 text-rose-800 border border-rose-200"
-                          : s.remainingSessions <= 2
-                          ? "bg-amber-100 text-amber-900 border border-amber-200"
-                          : "text-emerald-700 bg-emerald-50"
-                      }`}>
-                        {s.remainingSessions > 0
-                          ? `Còn ${s.remainingSessions} buổi`
-                          : s.remainingSessions === 0
-                          ? `Hết buổi (0 buổi)`
-                          : `Lố ${Math.abs(s.remainingSessions)} buổi`}
-                      </span>
+                  {/* PHẢI: 4 NÚT ĐIỂM DANH DỄ BẤM + BTVN NHANH */}
+                  <div className="flex items-center gap-1.5 shrink-0 self-end md:self-auto">
+                    {/* 4 TRẠNG THÁI ĐIỂM DANH */}
+                    <div className="flex items-center bg-slate-50 p-0.5 rounded-xl border border-slate-200/80 gap-0.5">
+                      {STATUS_BUTTONS.map((b) => {
+                        const active = marks[s.studentId] === b.key;
+                        const Icon = b.icon;
+                        return (
+                          <button
+                            key={b.key}
+                            type="button"
+                            onClick={() => setMarks((p) => ({ ...p, [s.studentId]: b.key }))}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border transition-all ${
+                              active
+                                ? `${b.colorActive} shadow-xs font-extrabold`
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{b.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    <div className="text-xs text-slate-600">
-                      Đã học: <strong className="text-slate-900">{s.attended} buổi</strong> · Có phép: {s.excused} · Vắng: {s.absentUnexcused}
-                    </div>
-                  )}
 
-                  {/* TRẠNG THÁI HỌC PHÍ (HỖ TRỢ PRIVACY MODE) */}
-                  {s.tuition ? (
-                    <div className="pt-0.5">
-                      {isExpiredOrOver ? (
-                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-300 text-xs font-black text-rose-800 shadow-xs">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                          {privacyMode ? (
-                            <span>Đã hết số buổi đóng phí theo lịch — Cần thu kỳ mới</span>
-                          ) : s.remainingSessions === 0 ? (
-                            <span>🚨 Đã dùng hết {s.targetSessions} buổi đã nộp — Cần thu học phí kỳ mới ({vnd(detail.class.monthlyTuition)})</span>
-                          ) : (
-                            <span>🚨 Học lố {Math.abs(s.remainingSessions)} buổi theo lịch — Cần thu học phí kỳ mới ({vnd(detail.class.monthlyTuition)})</span>
-                          )}
+                    {/* TOGGLE BTVN NHANH */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHomeworkMarks((p) => ({
+                          ...p,
+                          [s.studentId]: p[s.studentId] === false ? true : false,
+                        }))
+                      }
+                      className={`px-2 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1 ${
+                        homeworkMarks[s.studentId] !== false
+                          ? "bg-teal-50 text-teal-700 border-teal-200"
+                          : "bg-rose-50 text-rose-700 border-rose-200"
+                      }`}
+                      title="Đổi trạng thái nộp bài tập về nhà"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">
+                        {homeworkMarks[s.studentId] !== false ? "✓ BTVN" : "✕ BTVN"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* PHẦN CHI TIẾT MỞ RỘNG (EXPANDED DRAWER - CHỈ HIỂN THỊ KHI CLICK VÀO) */}
+                {isExpanded && (
+                  <div className="border-t border-slate-100 bg-slate-50/70 p-4 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-150">
+                    {/* THÔNG TIN CHI TIẾT 3 CỘT */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      {/* CỘT 1: TIẾN ĐỘ BUỔI HỌC THEO LỊCH */}
+                      <div className="p-3 rounded-2xl bg-white border border-slate-200/80 space-y-1.5">
+                        <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                          Tiến độ buổi học
+                        </span>
+                        <div className="text-slate-800 font-medium">
+                          Đã qua theo lịch:{" "}
+                          <strong className="text-slate-900">
+                            {s.usedSessions}/{s.targetSessions} buổi
+                          </strong>
                         </div>
-                      ) : debt > 0 ? (
-                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          {privacyMode ? (
-                            <span>Chưa đóng đủ học phí</span>
-                          ) : (
-                            <span>Còn thiếu {vnd(debt)} (Đã đóng {vnd(s.tuition.paid)}/{vnd(s.tuition.total)})</span>
-                          )}
-                          {!privacyMode && s.tuition.dueDate && (
-                            <span className="text-[11px] font-normal text-rose-600">· Hạn: {fmtDate(s.tuition.dueDate)}</span>
-                          )}
-                        </div>
-                      ) : isExpiringSoon ? (
-                        <div className="inline-flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 border border-amber-300 text-xs font-extrabold text-amber-900 shadow-xs">
-                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <div className="text-slate-600 flex flex-wrap gap-2 text-[11px]">
                           <span>
-                            ⚠️ Sắp hết kỳ phí: Còn {s.remainingSessions} buổi theo lịch — Cần gửi phiếu nhắc PH nộp tháng sau
+                            Đi học: <strong>{s.attended}</strong>
+                          </span>
+                          <span>
+                            Vắng: <strong className="text-rose-600">{s.absentUnexcused}</strong>
+                          </span>
+                          <span>
+                            Có phép: <strong className="text-sky-700">{s.excused}</strong>
                           </span>
                         </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60">
-                          <Check className="w-3.5 h-3.5" />
-                          {privacyMode ? (
-                            <span>Đã hoàn thành học phí</span>
-                          ) : (
-                            <span>Đã đóng đủ ({vnd(s.tuition.paid)})</span>
-                          )}
-                          {isMonthly && s.remainingSessions > 0 && ` · Còn ${s.remainingSessions} buổi`}
+                        <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                          Ngày vào lớp: <strong>{fmtDate(s.joinDate)}</strong>
                         </div>
-                      )}
+                      </div>
+
+                      {/* CỘT 2: CHI TIẾT HỌC PHÍ & GHI CHÚ */}
+                      <div className="p-3 rounded-2xl bg-white border border-slate-200/80 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                            Tài chính &amp; Học phí
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPayFor(s)}
+                            className="text-[11px] font-extrabold text-indigo-600 hover:underline"
+                          >
+                            + Nạp phí
+                          </button>
+                        </div>
+
+                        {s.tuition ? (
+                          <div className="space-y-1 text-slate-800">
+                            <div>
+                              Đã nộp: <strong className="text-emerald-700">{vnd(s.tuition.paid)}</strong>
+                              {s.tuition.debt > 0 && (
+                                <span className="text-rose-600 font-bold ml-1.5">
+                                  · Nợ: {vnd(s.tuition.debt)}
+                                </span>
+                              )}
+                            </div>
+                            {s.tuition.dueDate && (
+                              <div className="text-[11px] text-slate-500">
+                                Hạn đóng: <strong>{fmtDate(s.tuition.dueDate)}</strong>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-rose-600 font-bold">Chưa có thông tin học phí</div>
+                        )}
+
+                        {s.tuitionNote ? (
+                          <div
+                            onClick={() => setNoteFor(s)}
+                            className="cursor-pointer p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center justify-between"
+                          >
+                            <span>📌 {s.tuitionNote}</span>
+                            <span className="font-bold underline text-amber-700 ml-1">Sửa</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setNoteFor(s)}
+                            className="text-[11px] text-slate-400 hover:text-indigo-600 font-medium"
+                          >
+                            + Thêm ghi chú học phí
+                          </button>
+                        )}
+                      </div>
+
+                      {/* CỘT 3: THÔNG TIN HỌC VIÊN & TRẠNG THÁI */}
+                      <div className="p-3 rounded-2xl bg-white border border-slate-200/80 space-y-2">
+                        <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                          Thông tin học viên
+                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Trạng thái:</span>
+                          <select
+                            value={s.status || "ACTIVE"}
+                            onChange={(e) => handleUpdateStudentStatus(s, e.target.value as any)}
+                            className="text-xs font-bold px-2 py-1 rounded-lg border border-slate-200 bg-slate-50"
+                          >
+                            <option value="ACTIVE">🟢 Đang học</option>
+                            <option value="PAUSED">⏸️ Bảo lưu</option>
+                            <option value="FINISHED">🏁 Đã nghỉ</option>
+                          </select>
+                        </div>
+                        {s.phone && (
+                          <div className="flex items-center justify-between text-slate-600">
+                            <span className="text-slate-500">Điện thoại:</span>
+                            <span className="font-bold">{s.phone}</span>
+                          </div>
+                        )}
+                        <div className="pt-1 border-t border-slate-100 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setDossierStudentId(s.studentId)}
+                            className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                          >
+                            <FileText className="w-3 h-3" /> Xem hồ sơ ↗
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStudent(s)}
+                            className="text-[11px] font-bold text-rose-500 hover:text-rose-700"
+                          >
+                            Xóa khỏi lớp
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="text-xs font-bold text-rose-600">Chưa nạp học phí</div>
-                  )}
 
-                  {s.tuitionNote && (
-                    <div
-                      onClick={() => setNoteFor(s)}
-                      className="cursor-pointer mt-1 px-3 py-1.5 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-900 font-medium flex items-center justify-between gap-2"
-                    >
-                      <span>📌 {s.tuitionNote}</span>
-                      <span className="text-[11px] font-bold text-amber-700 underline">Sửa</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* PHẢI: 4 NÚT ĐIỂM DANH + BTVN + NHẬN XÉT + LINK PH + NẠP PHÍ */}
-              <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2">
-                {/* 4 NÚT TRẠNG THÁI */}
-                <div className="flex items-center bg-slate-50 p-1 rounded-2xl border border-slate-200/80 gap-1">
-                  {STATUS_BUTTONS.map((b) => {
-                    const active = marks[s.studentId] === b.key;
-                    const Icon = b.icon;
-                    return (
-                      <button
-                        key={b.key}
-                        type="button"
-                        onClick={() => setMarks((p) => ({ ...p, [s.studentId]: b.key }))}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all duration-150 ${
-                          active
-                            ? `${b.colorActive} shadow-sm`
-                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{b.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* BTVN TOGGLE */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setHomeworkMarks((p) => ({
-                      ...p,
-                      [s.studentId]: p[s.studentId] === false ? true : false,
-                    }))
-                  }
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                    homeworkMarks[s.studentId] !== false
-                      ? "bg-teal-50 text-teal-700 border-teal-200"
-                      : "bg-rose-50 text-rose-700 border-rose-200"
-                  }`}
-                  title="Nhấn để đổi trạng thái làm bài tập về nhà"
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>
-                    {homeworkMarks[s.studentId] !== false
-                      ? "✓ Đã làm BTVN"
-                      : "✕ Chưa làm BTVN"}
-                  </span>
-                </button>
-
-                {/* NHẬN XÉT BUỔI HỌC VỚI QUICK TAGS */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingNoteFor(
-                        editingNoteFor === s.studentId ? null : s.studentId
-                      )
-                    }
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                      noteMarks[s.studentId]
-                        ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    }`}
-                    title="Nhận xét buổi học gửi phụ huynh"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span className="max-w-[120px] truncate">
-                      {noteMarks[s.studentId] || "Nhận xét..."}
-                    </span>
-                  </button>
-
-                  {editingNoteFor === s.studentId && (
-                    <div className="absolute right-0 top-full mt-1.5 z-30 w-72 p-3 bg-white rounded-2xl shadow-xl border border-slate-200 space-y-2 animate-fadeIn text-xs">
-                      <div className="flex items-center justify-between font-bold text-slate-800">
-                        <span>Nhận xét buổi học:</span>
+                    {/* DÀN NÚT HÀNH ĐỘNG DƯỚI NGĂN MỞ RỘNG */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* NÚT ĐÁNH GIÁ THÁNG */}
                         <button
                           type="button"
-                          onClick={() => setEditingNoteFor(null)}
-                          className="text-slate-400 hover:text-slate-600 font-bold"
+                          onClick={() => setEvaluationFor(s)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition"
                         >
-                          ✕
+                          <Award className="w-3.5 h-3.5 text-amber-600" />
+                          <span>
+                            {s.latestEvaluation
+                              ? `Đánh giá tháng (${s.latestEvaluation.classification})`
+                              : "⭐ Đánh giá & Xếp loại tháng"}
+                          </span>
+                        </button>
+
+                        {/* NÚT NHẬN XÉT BUỔI HỌC */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditingNoteFor(
+                                editingNoteFor === s.studentId ? null : s.studentId
+                              )
+                            }
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                              noteMarks[s.studentId]
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>{noteMarks[s.studentId] || "Nhận xét buổi học..."}</span>
+                          </button>
+
+                          {editingNoteFor === s.studentId && (
+                            <div className="absolute left-0 bottom-full mb-1.5 z-30 w-72 p-3 bg-white rounded-2xl shadow-xl border border-slate-200 space-y-2 text-xs">
+                              <div className="flex items-center justify-between font-bold text-slate-800">
+                                <span>Nhận xét buổi học:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingNoteFor(null)}
+                                  className="text-slate-400 hover:text-slate-600 font-bold"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {[
+                                  "⭐ Phát biểu tích cực",
+                                  "💬 Nói tự tin",
+                                  "📖 Cần ôn từ vựng",
+                                  "✍️ Cải thiện bài viết",
+                                  "⚠️ Mất tập trung",
+                                ].map((tag) => (
+                                  <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => {
+                                      setNoteMarks((p) => ({ ...p, [s.studentId]: tag }));
+                                      setEditingNoteFor(null);
+                                    }}
+                                    className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 transition"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                                placeholder="Hoặc gõ nhận xét riêng..."
+                                value={noteMarks[s.studentId] || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setNoteMarks((p) => ({ ...p, [s.studentId]: val }));
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* NÚT LINK PHỤ HUYNH */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyParentLink(s)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 transition"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>Sao chép Link Zalo PH</span>
                         </button>
                       </div>
 
-                      {/* QUICK TAGS */}
-                      <div className="flex flex-wrap gap-1">
-                        {[
-                          "⭐ Phát biểu tích cực",
-                          "💬 Nói tự tin",
-                          "📖 Cần ôn từ vựng",
-                          "✍️ Cải thiện bài viết",
-                          "⚠️ Mất tập trung",
-                        ].map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => {
-                              setNoteMarks((p) => ({
-                                ...p,
-                                [s.studentId]: tag,
-                              }));
-                              setEditingNoteFor(null);
-                            }}
-                            className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 transition"
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-
-                      <input
-                        className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                        placeholder="Hoặc gõ nhận xét riêng..."
-                        value={noteMarks[s.studentId] || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setNoteMarks((p) => ({
-                            ...p,
-                            [s.studentId]: val,
-                          }));
-                        }}
-                      />
+                      {/* NÚT NẠP HỌC PHÍ */}
+                      <button
+                        type="button"
+                        onClick={() => setPayFor(s)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs active:scale-95 transition"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Nạp học phí
+                      </button>
                     </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setEvaluationFor(s)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-amber-200 bg-amber-50/60 hover:bg-amber-100 text-amber-900 shadow-xs transition"
-                  title="Đánh giá & xếp loại định kỳ tháng (Học sinh phổ thông - thang điểm 10)"
-                >
-                  <Award className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Đánh giá tháng</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleCopyParentLink(s)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 shadow-xs transition"
-                  title="Sao chép link sổ liên lạc và tin nhắn Zalo gửi phụ huynh"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Link PH</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPayFor(s)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs active:scale-95 transition"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  Nạp học phí
-                </button>
+                  </div>
+                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         {detail.students.length === 0 && (
           <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-300">
