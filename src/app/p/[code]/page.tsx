@@ -16,7 +16,11 @@ import {
   GraduationCap,
   Sparkles,
   Phone,
-  HelpCircle
+  HelpCircle,
+  Award,
+  Star,
+  BookOpen,
+  MessageSquare
 } from "lucide-react";
 
 const vnd = (n: number) => `${Math.round(n || 0).toLocaleString("vi-VN")}đ`;
@@ -85,7 +89,9 @@ export default function ParentPortalPage() {
     );
   }
 
-  const { student, classInfo, attendance, tuition, payments } = data;
+  const { student, classInfo, attendance, tuition, payments, evaluations = [], latestEvaluation } = data;
+  const [selectedEvalIndex, setSelectedEvalIndex] = useState(0);
+  const currentEval = evaluations.length > 0 ? evaluations[selectedEvalIndex] || latestEvaluation : latestEvaluation;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 pb-12">
@@ -207,6 +213,164 @@ export default function ParentPortalPage() {
             </div>
           </div>
         </div>
+
+        {/* PHIẾU ĐÁNH GIÁ & XẾP LOẠI ĐỊNH KỲ THÁNG (DÀNH CHO HỌC SINH PHỔ THÔNG) */}
+        {currentEval ? (
+          <div className="bg-white rounded-3xl border border-indigo-100 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">
+                    Phiếu Đánh Giá &amp; Xếp Loại Tháng
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Kỳ đánh giá: <strong className="text-slate-800">{currentEval.monthYear}</strong> (Áp dụng thang điểm 10)
+                  </p>
+                </div>
+              </div>
+
+              {evaluations.length > 1 && (
+                <select
+                  value={selectedEvalIndex}
+                  onChange={(e) => setSelectedEvalIndex(Number(e.target.value))}
+                  className="text-xs px-2.5 py-1 rounded-xl border border-slate-200 bg-slate-50 font-bold text-slate-700"
+                >
+                  {evaluations.map((ev: any, idx: number) => (
+                    <option key={ev.id || idx} value={idx}>
+                      Kỳ {ev.monthYear} ({ev.classification})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* BANNER XẾP LOẠI CHÍNH */}
+            <div
+              className={`p-4 rounded-2xl flex items-center justify-between gap-3 text-white ${
+                currentEval.classification === "XUAT_SAC"
+                  ? "bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 shadow-md shadow-amber-500/20"
+                  : currentEval.classification === "GIOI"
+                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-md shadow-emerald-600/20"
+                  : currentEval.classification === "KHA"
+                  ? "bg-gradient-to-r from-indigo-600 to-blue-600 shadow-md shadow-indigo-600/20"
+                  : "bg-gradient-to-r from-rose-500 to-amber-600 shadow-md shadow-rose-500/20"
+              }`}
+            >
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider opacity-90 block">
+                  Xếp loại năng lực tháng
+                </span>
+                <span className="text-lg font-black tracking-tight">
+                  {currentEval.classification === "XUAT_SAC"
+                    ? "🏆 HỌC SINH XUẤT SẮC"
+                    : currentEval.classification === "GIOI"
+                    ? "🌟 HỌC SINH GIỎI"
+                    : currentEval.classification === "KHA"
+                    ? "📈 HỌC SINH KHÁ"
+                    : "⚠️ CẦN KÈM THÊM KIẾN THỨC"}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold opacity-90 block">ĐTB Điểm số</span>
+                <span className="text-2xl font-black">
+                  {(() => {
+                    const scores = [currentEval.testScore, currentEval.grammarScore, currentEval.skillsScore].filter(
+                      (s) => s !== null && s !== undefined
+                    );
+                    if (scores.length === 0) return "—";
+                    return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+                  })()}
+                  <span className="text-xs font-semibold opacity-80">/10</span>
+                </span>
+              </div>
+            </div>
+
+            {/* 3 CHỈ SỐ ĐIỂM SỐ PHỔ THÔNG (THANG ĐIỂM 10) */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                <span className="text-[11px] text-slate-500 block">Kiểm tra tháng</span>
+                <span className="text-base font-extrabold text-slate-900">
+                  {currentEval.testScore !== null && currentEval.testScore !== undefined
+                    ? `${currentEval.testScore}/10`
+                    : "Chưa chấm"}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-indigo-50/60 border border-indigo-100">
+                <span className="text-[11px] text-indigo-700 block">Ngữ pháp &amp; Từ vựng</span>
+                <span className="text-base font-extrabold text-indigo-900">
+                  {currentEval.grammarScore !== null && currentEval.grammarScore !== undefined
+                    ? `${currentEval.grammarScore}/10`
+                    : "—"}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100">
+                <span className="text-[11px] text-emerald-700 block">Kỹ năng Nghe - Nói</span>
+                <span className="text-base font-extrabold text-emerald-900">
+                  {currentEval.skillsScore !== null && currentEval.skillsScore !== undefined
+                    ? `${currentEval.skillsScore}/10`
+                    : "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* THÁI ĐỘ & BTVN */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 block flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 text-amber-500" /> Thái độ học tập:
+                </span>
+                <p className="font-semibold text-slate-800">
+                  {currentEval.attitude || "Chăm chỉ, tích cực nghe giảng"}
+                </p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 block flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5 text-teal-600" /> Tình hình BTVN:
+                </span>
+                <p className="font-semibold text-slate-800">
+                  {currentEval.homeworkStatus || "Hoàn thành bài tập đầy đủ"}
+                </p>
+              </div>
+            </div>
+
+            {/* ĐIỂM MẠNH & CẦN CẢI THIỆN */}
+            {(currentEval.strengths || currentEval.improvements) && (
+              <div className="space-y-2 text-xs">
+                {currentEval.strengths && (
+                  <div className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-1">
+                    <span className="text-[11px] font-bold text-emerald-800 block">
+                      ⭐ Ưu điểm nổi bật:
+                    </span>
+                    <p className="text-slate-800 font-medium">{currentEval.strengths}</p>
+                  </div>
+                )}
+                {currentEval.improvements && (
+                  <div className="p-3 rounded-2xl bg-amber-50/50 border border-amber-100 space-y-1">
+                    <span className="text-[11px] font-bold text-amber-800 block">
+                      🎯 Kiến thức cần tiếp tục củng cố:
+                    </span>
+                    <p className="text-slate-800 font-medium">{currentEval.improvements}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* LỜI NHẬN XÉT CỦA GIÁO VIÊN */}
+            {currentEval.teacherComment && (
+              <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-1 text-xs">
+                <span className="text-[11px] font-bold text-indigo-900 block flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-600" /> Nhận xét chi tiết từ Giáo viên:
+                </span>
+                <p className="text-slate-800 font-medium leading-relaxed italic">
+                  "{currentEval.teacherComment}"
+                </p>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* LỊCH SỬ TỪNG BUỔI HỌC MINH BẠCH */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-3">

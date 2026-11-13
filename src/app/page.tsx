@@ -40,7 +40,10 @@ import {
   Zap,
   RotateCcw,
   MessageSquare,
-  Download
+  Download,
+  Award,
+  Star,
+  Medal
 } from "lucide-react";
 
 type ClassType = "MONTHLY" | "COURSE";
@@ -97,6 +100,27 @@ type Student = {
     expectedSessions: number;
   } | null;
   paymentHistory: PaymentHistoryItem[];
+  evaluations?: StudentEvaluationItem[];
+  latestEvaluation?: StudentEvaluationItem | null;
+};
+
+type StudentEvaluationItem = {
+  id?: string;
+  enrollmentId: string;
+  studentId: string;
+  classId: string;
+  monthYear: string;
+  classification: "XUAT_SAC" | "GIOI" | "KHA" | "CAN_KEM";
+  testScore: number | null;
+  grammarScore: number | null;
+  skillsScore: number | null;
+  attitude: string | null;
+  homeworkStatus: string | null;
+  strengths: string | null;
+  improvements: string | null;
+  teacherComment: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type SessionHistoryItem = {
@@ -1012,6 +1036,7 @@ function ClassView({
   const [saving, setSaving] = useState(false);
   const [payFor, setPayFor] = useState<Student | null>(null);
   const [noteFor, setNoteFor] = useState<Student | null>(null);
+  const [evaluationFor, setEvaluationFor] = useState<Student | null>(null);
   const [dossierStudentId, setDossierStudentId] = useState<string | null>(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
@@ -1932,6 +1957,47 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                       <option value="FINISHED">🏁 Đã nghỉ</option>
                     </select>
 
+                    {/* HUY HIỆU ĐÁNH GIÁ & PHÂN LOẠI THÁNG */}
+                    {s.latestEvaluation ? (
+                      <button
+                        type="button"
+                        onClick={() => setEvaluationFor(s)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold border transition flex items-center gap-1 ${
+                          s.latestEvaluation.classification === "XUAT_SAC"
+                            ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                            : s.latestEvaluation.classification === "GIOI"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                            : s.latestEvaluation.classification === "KHA"
+                            ? "bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100"
+                            : "bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100"
+                        }`}
+                        title={`Đánh giá tháng ${s.latestEvaluation.monthYear}: Bấm để xem / sửa`}
+                      >
+                        <span>
+                          {s.latestEvaluation.classification === "XUAT_SAC"
+                            ? "🏆 Xuất sắc"
+                            : s.latestEvaluation.classification === "GIOI"
+                            ? "🌟 Giỏi"
+                            : s.latestEvaluation.classification === "KHA"
+                            ? "📈 Khá"
+                            : "⚠️ Cần kèm"}
+                        </span>
+                        {s.latestEvaluation.testScore !== null && s.latestEvaluation.testScore !== undefined && (
+                          <span className="font-mono">({s.latestEvaluation.testScore}đ)</span>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEvaluationFor(s)}
+                        className="px-2 py-0.5 rounded-lg text-[10px] font-bold border border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 transition flex items-center gap-1"
+                        title="Bấm để đánh giá & xếp loại định kỳ tháng"
+                      >
+                        <Star className="w-3 h-3 text-amber-500" />
+                        <span>Đánh giá tháng</span>
+                      </button>
+                    )}
+
                     {s.phone && (
                       <span className="text-xs text-slate-400 font-medium">· {s.phone}</span>
                     )}
@@ -2152,6 +2218,16 @@ Trân trọng cảm ơn Quý phụ huynh!`;
 
                 <button
                   type="button"
+                  onClick={() => setEvaluationFor(s)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-amber-200 bg-amber-50/60 hover:bg-amber-100 text-amber-900 shadow-xs transition"
+                  title="Đánh giá & xếp loại định kỳ tháng (Học sinh phổ thông - thang điểm 10)"
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Đánh giá tháng</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleCopyParentLink(s)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 shadow-xs transition"
                   title="Sao chép link sổ liên lạc và tin nhắn Zalo gửi phụ huynh"
@@ -2202,6 +2278,20 @@ Trân trọng cảm ơn Quý phụ huynh!`;
           onDone={async () => {
             setNoteFor(null);
             notify("Đã lưu ghi chú học phí!");
+            await loadDetail();
+          }}
+        />
+      )}
+
+      {evaluationFor && (
+        <MonthlyEvaluationModal
+          student={evaluationFor}
+          classId={classId}
+          className={detail.class.name}
+          onClose={() => setEvaluationFor(null)}
+          onDone={async () => {
+            setEvaluationFor(null);
+            notify("Đã lưu đánh giá & xếp loại định kỳ tháng!");
             await loadDetail();
           }}
         />
@@ -3422,6 +3512,500 @@ function NoteModal({
             className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition"
           >
             Lưu ghi chú
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function MonthlyEvaluationModal({
+  student,
+  classId,
+  className,
+  onClose,
+  onDone,
+}: {
+  student: Student;
+  classId: string;
+  className: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const [monthYear, setMonthYear] = useState(
+    student.latestEvaluation?.monthYear || currentMonthStr
+  );
+
+  const existing =
+    student.evaluations?.find((e) => e.monthYear === monthYear) ||
+    (monthYear === student.latestEvaluation?.monthYear ? student.latestEvaluation : null);
+
+  const [classification, setClassification] = useState<"XUAT_SAC" | "GIOI" | "KHA" | "CAN_KEM">(
+    existing?.classification || "GIOI"
+  );
+  const [testScore, setTestScore] = useState<string>(
+    existing?.testScore !== null && existing?.testScore !== undefined ? String(existing.testScore) : "8.5"
+  );
+  const [grammarScore, setGrammarScore] = useState<string>(
+    existing?.grammarScore !== null && existing?.grammarScore !== undefined ? String(existing.grammarScore) : "8.0"
+  );
+  const [skillsScore, setSkillsScore] = useState<string>(
+    existing?.skillsScore !== null && existing?.skillsScore !== undefined ? String(existing.skillsScore) : "8.5"
+  );
+  const [attitude, setAttitude] = useState(
+    existing?.attitude || "Chăm chỉ, tích cực phát biểu xây dựng bài"
+  );
+  const [homeworkStatus, setHomeworkStatus] = useState(
+    existing?.homeworkStatus || "Hoàn thành 100% bài tập về nhà đầy đủ"
+  );
+  const [strengths, setStrengths] = useState(
+    existing?.strengths || "Nắm chắc cấu trúc câu, phát âm chuẩn, từ vựng tốt"
+  );
+  const [improvements, setImprovements] = useState(
+    existing?.improvements || "Tiếp tục duy trì và luyện thêm kỹ năng phản xạ nghe"
+  );
+  const [teacherComment, setTeacherComment] = useState(
+    existing?.teacherComment ||
+      `Em ${student.name} trong tháng học tập rất chăm chỉ, tiếp thu bài nhanh và có ý thức làm bài tập đầy đủ. Trung tâm đánh giá cao tinh thần học tập của em!`
+  );
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [copiedZalo, setCopiedZalo] = useState(false);
+
+  useEffect(() => {
+    const ev = student.evaluations?.find((e) => e.monthYear === monthYear);
+    if (ev) {
+      setClassification(ev.classification);
+      setTestScore(ev.testScore !== null && ev.testScore !== undefined ? String(ev.testScore) : "");
+      setGrammarScore(ev.grammarScore !== null && ev.grammarScore !== undefined ? String(ev.grammarScore) : "");
+      setSkillsScore(ev.skillsScore !== null && ev.skillsScore !== undefined ? String(ev.skillsScore) : "");
+      setAttitude(ev.attitude || "");
+      setHomeworkStatus(ev.homeworkStatus || "");
+      setStrengths(ev.strengths || "");
+      setImprovements(ev.improvements || "");
+      setTeacherComment(ev.teacherComment || "");
+    }
+  }, [monthYear, student.evaluations]);
+
+  const generateComment = () => {
+    const t = Number(testScore) || 8;
+    let rankText = "Học sinh Giỏi";
+    if (classification === "XUAT_SAC") rankText = "Học sinh Xuất sắc";
+    if (classification === "KHA") rankText = "Học sinh Khá";
+    if (classification === "CAN_KEM") rankText = "Cần kèm thêm";
+
+    const text = `Tháng ${monthYear}, em ${student.name} đạt xếp loại ${rankText} với điểm kiểm tra định kỳ ${t}/10. ${
+      attitude ? `Về thái độ: ${attitude}. ` : ""
+    }${homeworkStatus ? `Về BTVN: ${homeworkStatus}. ` : ""}${
+      improvements ? `Cần củng cố thêm: ${improvements}. ` : ""
+    }Giáo viên khuyến khích em tiếp tục phát huy trong tháng tới!`;
+    setTeacherComment(text);
+  };
+
+  const handleCopyZalo = () => {
+    const parentCode = student.studentCode || student.phone || student.studentId;
+    const parentUrl = `https://danielts.nextband.vn/p/${encodeURIComponent(parentCode)}`;
+    const rankTitle =
+      classification === "XUAT_SAC"
+        ? "🏆 HỌC SINH XUẤT SẮC"
+        : classification === "GIOI"
+        ? "🌟 HỌC SINH GIỎI"
+        : classification === "KHA"
+        ? "📈 HỌC SINH KHÁ"
+        : "⚠️ CẦN KÈM THÊM KIẾN THỨC";
+
+    const msg = `📢 BÁO CÁO ĐÁNH GIÁ & XẾP LOẠI ĐỊNH KỲ THÁNG ${monthYear}
+Trung tâm Anh ngữ DanielTS xin gửi tới Quý Phụ huynh kết quả học tập của học viên:
+
+👤 Học viên: ${student.name} (${student.studentCode || "DTS"})
+🏫 Lớp: ${className}
+🎖️ XẾP LOẠI THÁNG: ${rankTitle}
+
+📊 BẢNG ĐIỂM ĐỊNH KỲ (Thang điểm 10):
+• Điểm kiểm tra tháng: ${testScore || "—"}/10
+• Điểm Ngữ pháp & Từ vựng: ${grammarScore || "—"}/10
+• Điểm Kỹ năng Nghe - Nói: ${skillsScore || "—"}/10
+
+🌟 THÁI ĐỘ & CHUYÊN CẦN:
+• Thái độ trên lớp: ${attitude || "Chăm chỉ, tích cực"}
+• Tình hình BTVN: ${homeworkStatus || "Hoàn thành đầy đủ"}
+
+⭐ ƯU ĐIỂM: ${strengths || "Tiếp thu nhanh, phát âm chuẩn"}
+🎯 ĐIỂM CẦN CỐ GẮNG: ${improvements || "Tiếp tục rèn luyện kỹ năng"}
+
+💌 NHẬN XÉT CỦA GIÁO VIÊN:
+"${teacherComment || "Em học tập rất chăm chỉ và có nhiều tiến bộ!"}"
+
+🔗 Phụ huynh bấm vào link bên dưới để xem Sổ liên lạc trực tuyến chi tiết và lịch sử điểm danh từng buổi:
+${parentUrl}
+
+Trân trọng,
+Giáo viên phụ trách & Trung tâm Anh ngữ DanielTS`;
+
+    navigator.clipboard.writeText(msg);
+    setCopiedZalo(true);
+    setTimeout(() => setCopiedZalo(false), 2500);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      setErr("");
+      await api(`/api/classes/${classId}/evaluations`, {
+        method: "POST",
+        body: JSON.stringify({
+          enrollmentId: student.enrollmentId,
+          studentId: student.studentId,
+          monthYear,
+          classification,
+          testScore: testScore !== "" ? Number(testScore) : null,
+          grammarScore: grammarScore !== "" ? Number(grammarScore) : null,
+          skillsScore: skillsScore !== "" ? Number(skillsScore) : null,
+          attitude,
+          homeworkStatus,
+          strengths,
+          improvements,
+          teacherComment,
+        }),
+      });
+      onDone();
+    } catch (e: any) {
+      setErr(e.message || "Lỗi khi lưu đánh giá.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const avgScore = (() => {
+    const scores = [testScore, grammarScore, skillsScore]
+      .filter((s) => s !== "" && !isNaN(Number(s)))
+      .map((s) => Number(s));
+    if (scores.length === 0) return null;
+    return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+  })();
+
+  return (
+    <Modal
+      title={`🏆 Đánh Giá & Xếp Loại Định Kỳ Tháng · ${student.name}`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit} className="space-y-4 max-h-[78vh] overflow-y-auto pr-1">
+        {/* CHỌN THÁNG ĐÁNH GIÁ & GHI CHÚ PHỔ THÔNG */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100">
+          <div>
+            <span className="text-xs font-extrabold text-indigo-950 block">
+              Kỳ đánh giá định kỳ tháng:
+            </span>
+            <span className="text-[11px] text-indigo-700 font-medium">
+              Áp dụng cho học sinh phổ thông (Thang điểm 10)
+            </span>
+          </div>
+          <input
+            type="month"
+            value={monthYear}
+            onChange={(e) => setMonthYear(e.target.value)}
+            className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-white text-xs font-bold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        {/* 1. CHỌN XẾP LOẠI (CLASSIFICATION) */}
+        <div className="space-y-2">
+          <label className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+            <span>1. Phân loại &amp; Xếp loại học lực tháng</span>
+            {avgScore && (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                ĐTB: <strong className="text-indigo-600">{avgScore}</strong>/10
+              </span>
+            )}
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              {
+                id: "XUAT_SAC",
+                label: "Xuất sắc",
+                sub: "≥ 9.0 · Gương mẫu",
+                icon: "🏆",
+                activeBg: "bg-amber-500 text-white border-amber-600 shadow-md",
+              },
+              {
+                id: "GIOI",
+                label: "Giỏi",
+                sub: "8.0 - 8.9 · Nắm chắc",
+                icon: "🌟",
+                activeBg: "bg-emerald-600 text-white border-emerald-700 shadow-md",
+              },
+              {
+                id: "KHA",
+                label: "Khá",
+                sub: "6.5 - 7.9 · Tiến bộ",
+                icon: "📈",
+                activeBg: "bg-indigo-600 text-white border-indigo-700 shadow-md",
+              },
+              {
+                id: "CAN_KEM",
+                label: "Cần kèm",
+                sub: "< 6.5 · Củng cố",
+                icon: "⚠️",
+                activeBg: "bg-rose-600 text-white border-rose-700 shadow-md",
+              },
+            ].map((tier) => {
+              const active = classification === tier.id;
+              return (
+                <button
+                  key={tier.id}
+                  type="button"
+                  onClick={() => setClassification(tier.id as any)}
+                  className={`p-3 rounded-2xl border text-center transition-all ${
+                    active
+                      ? tier.activeBg
+                      : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <span className="text-xl block mb-0.5">{tier.icon}</span>
+                  <span className="text-xs font-extrabold block">{tier.label}</span>
+                  <span
+                    className={`text-[10px] block opacity-80 ${
+                      active ? "text-white" : "text-slate-500"
+                    }`}
+                  >
+                    {tier.sub}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. ĐIỂM SỐ CHI TIẾT (THANG ĐIỂM 10) */}
+        <div className="space-y-2">
+          <label className="text-xs font-extrabold text-slate-800 block">
+            2. Điểm số định kỳ (Thang điểm 10)
+          </label>
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-600 block mb-1">
+                📝 Bài KT tháng:
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                placeholder="0.0 - 10"
+                value={testScore}
+                onChange={(e) => setTestScore(e.target.value)}
+                className="w-full px-2 py-1.5 rounded-xl border border-slate-300 text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-600 block mb-1">
+                📚 Ngữ pháp &amp; Từ:
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                placeholder="0.0 - 10"
+                value={grammarScore}
+                onChange={(e) => setGrammarScore(e.target.value)}
+                className="w-full px-2 py-1.5 rounded-xl border border-slate-300 text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-600 block mb-1">
+                🗣️ Kỹ năng Nghe - Nói:
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                placeholder="0.0 - 10"
+                value={skillsScore}
+                onChange={(e) => setSkillsScore(e.target.value)}
+                className="w-full px-2 py-1.5 rounded-xl border border-slate-300 text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. THÁI ĐỘ HỌC TẬP & BÀI TẬP VỀ NHÀ */}
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-slate-800 block">
+              3. Thái độ học tập trên lớp:
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Chăm chỉ, tích cực phát biểu",
+                "Tập trung nghe giảng",
+                "Có nhiều tiến bộ vượt bậc",
+                "Cần tập trung hơn",
+                "Còn rụt rè khi phát biểu",
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setAttitude(chip)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 transition"
+                >
+                  + {chip}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={attitude}
+              onChange={(e) => setAttitude(e.target.value)}
+              placeholder="VD: Chăm chỉ, tích cực phát biểu..."
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-slate-800 block">
+              Tình hình BTVN:
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Hoàn thành 100% đầy đủ",
+                "Trình bày sạch đẹp, đúng hạn",
+                "Còn thiếu 1 vài bài",
+                "Cần nhắc nhở nộp bài đúng hạn",
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setHomeworkStatus(chip)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 transition"
+                >
+                  + {chip}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={homeworkStatus}
+              onChange={(e) => setHomeworkStatus(e.target.value)}
+              placeholder="VD: Hoàn thành 100% đầy đủ..."
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+        </div>
+
+        {/* 4. ƯU ĐIỂM & ĐIỂM CẦN CỦNG CỐ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-emerald-800 block">
+              ⭐ Ưu điểm nổi bật:
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Phát âm chuẩn",
+                "Vốn từ phong phú",
+                "Nắm chắc ngữ pháp",
+                "Tự tin giao tiếp",
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setStrengths(chip)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition"
+                >
+                  + {chip}
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              value={strengths}
+              onChange={(e) => setStrengths(e.target.value)}
+              placeholder="Ưu điểm của học sinh..."
+              className="w-full px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/20 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-amber-800 block">
+              🎯 Cần tiếp tục củng cố:
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Củng cố các thì ngữ pháp",
+                "Ôn tập từ vựng Unit",
+                "Rèn luyện kỹ năng nghe",
+                "Cải thiện cấu trúc viết",
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setImprovements(chip)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
+                >
+                  + {chip}
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              value={improvements}
+              onChange={(e) => setImprovements(e.target.value)}
+              placeholder="Kiến thức cần củng cố thêm..."
+              className="w-full px-3 py-1.5 rounded-xl border border-amber-200 bg-amber-50/20 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+        </div>
+
+        {/* 5. LỜI NHẬN XÉT GỬI PHỤ HUYNH */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-extrabold text-slate-800">
+              5. Nhận xét chi tiết của Giáo viên gửi Phụ huynh:
+            </label>
+            <button
+              type="button"
+              onClick={generateComment}
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1"
+            >
+              <Sparkles className="w-3 h-3" />
+              Tự tạo mẫu nhận xét
+            </button>
+          </div>
+          <textarea
+            rows={3}
+            value={teacherComment}
+            onChange={(e) => setTeacherComment(e.target.value)}
+            placeholder="Lời nhận xét, động viên và hướng dẫn phụ huynh đồng hành cùng con..."
+            className="w-full px-3 py-2 rounded-2xl border border-slate-300 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        {err && <p className="text-xs font-bold text-rose-600">{err}</p>}
+
+        {/* NÚT HÀNH ĐỘNG */}
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={handleCopyZalo}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${
+              copiedZalo
+                ? "bg-emerald-600 text-white border-emerald-600"
+                : "bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs"
+            }`}
+          >
+            {copiedZalo ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedZalo ? "✓ Đã copy phiếu Zalo!" : "📋 Copy Phiếu gửi Zalo PH"}</span>
+          </button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition"
+          >
+            {loading ? "Đang lưu..." : "💾 Lưu Đánh Giá Định Kỳ Tháng"}
           </button>
         </div>
       </form>

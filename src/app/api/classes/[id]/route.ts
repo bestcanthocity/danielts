@@ -20,6 +20,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
           student: true,
           tuitionCycles: { orderBy: { createdAt: "desc" } },
           payments: { orderBy: { paidAt: "desc" } },
+          evaluations: { orderBy: { monthYear: "desc" } },
         },
       },
     },
@@ -120,6 +121,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
           }
         : null,
       paymentHistory,
+      evaluations: e.evaluations || [],
+      latestEvaluation: e.evaluations?.[0] || null,
     };
   });
 

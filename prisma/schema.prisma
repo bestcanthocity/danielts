@@ -27,6 +27,7 @@ model User {
   studentIssues   TuitionIssue[]     @relation("IssueStudent")
   markedRecords   AttendanceRecord[] @relation("MarkedByUser")
   studentRecords  AttendanceRecord[] @relation("StudentAttendance")
+  evaluations     StudentEvaluation[] @relation("StudentEvaluations")
 }
 
 model ClassRoom {
@@ -49,6 +50,7 @@ model ClassRoom {
   enrollments       Enrollment[]
   sessions          ClassSession[]
   tuitionIssues     TuitionIssue[]
+  evaluations       StudentEvaluation[]
 }
 
 model Enrollment {
@@ -67,6 +69,7 @@ model Enrollment {
   student           User            @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
   tuitionCycles     TuitionCycle[]
   payments          PaymentRecord[]
+  evaluations       StudentEvaluation[]
 
   @@unique([classId, studentId])
 }
@@ -162,4 +165,29 @@ model TuitionIssue {
   classRoom           ClassRoom     @relation(fields: [classId], references: [id], onDelete: Cascade)
   tuitionCycle        TuitionCycle? @relation(fields: [tuitionCycleId], references: [id], onDelete: SetNull)
   reportedBy          User          @relation("IssueReporter", fields: [reportedById], references: [id])
+}
+
+model StudentEvaluation {
+  id             String   @id @default(cuid())
+  enrollmentId   String
+  studentId      String
+  classId        String
+  monthYear      String   // "2026-11" hoặc "Tháng 11/2026"
+  classification String   @default("GIOI") // XUAT_SAC (Xuất sắc) | GIOI (Giỏi) | KHA (Khá) | CAN_KEM (Cần kèm thêm)
+  testScore      Float?   // Điểm kiểm tra định kỳ tháng (Thang điểm 10, vd: 8.5, 9.0)
+  grammarScore   Float?   // Điểm Ngữ pháp & Từ vựng (Thang điểm 10)
+  skillsScore    Float?   // Điểm Kỹ năng Nghe - Nói - Đọc (Thang điểm 10)
+  attitude       String?  // Thái độ học tập (Chăm chỉ, tích cực phát biểu, chú ý nghe giảng...)
+  homeworkStatus String?  // Tình hình BTVN (Hoàn thành 100%, Đầy đủ, Còn thiếu...)
+  strengths      String?  // Ưu điểm của học sinh trên lớp
+  improvements   String?  // Kiến thức cần củng cố (vd: Thì quá khứ, Câu bị động, Từ vựng Unit 3...)
+  teacherComment String?  // Nhận xét chi tiết của giáo viên gửi phụ huynh
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student        User       @relation("StudentEvaluations", fields: [studentId], references: [id], onDelete: Cascade)
+  classRoom      ClassRoom  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, monthYear])
 }

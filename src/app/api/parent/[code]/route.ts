@@ -36,6 +36,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
           payments: {
             orderBy: { paidAt: "desc" },
           },
+          evaluations: {
+            orderBy: { monthYear: "desc" },
+          },
         },
         orderBy: { joinDate: "asc" },
       },
@@ -171,5 +174,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       paidAt: p.paidAt,
       note: p.note,
     })),
+    evaluations: enr.evaluations || [],
+    latestEvaluation: enr.evaluations?.[0] || null,
   });
 }
