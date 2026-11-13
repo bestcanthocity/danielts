@@ -123,16 +123,23 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     };
   });
 
-  const sessionHistory = cls.sessions.map((s) => {
+  const sortedSessions = [...cls.sessions].sort(
+    (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime()
+  );
+
+  const sessionHistory = sortedSessions.map((s, idx) => {
     const d = new Date(s.sessionDate).toISOString().slice(0, 10);
     const presentCount = s.attendances.filter((a) =>
       ["PRESENT", "LATE"].includes(a.status)
     ).length;
     return {
       id: s.id,
+      index: idx + 1,
+      title: s.title || `Buổi ${idx + 1}`,
       date: d,
       presentCount,
       totalCount: s.attendances.length,
+      isCompleted: s.isCompleted || s.attendances.length > 0,
     };
   });
 

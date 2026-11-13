@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseScheduleDays, generateFixedSessions } from "@/lib/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -107,19 +108,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const scheduleText = String(body.scheduleText || "").trim();
+
     const created = await prisma.classRoom.create({
       data: {
         code: `LOP-${Date.now().toString(36).toUpperCase()}`,
         name,
         level: type === "COURSE" ? "IELTS" : "General",
         type,
-        scheduleText: String(body.scheduleText || "").trim(),
+        scheduleText,
         sessionsPerMonth,
         monthlyTuition,
         pricePerSession,
         teacherId: owner.id,
       },
     });
+
+    // Tự động ấn định 8 buổi học cố định theo lịch đã chọn để điểm danh nhanh
+    try {
+      const scheduleDays: number[] = Array.isArray(body.scheduleDays) && body.scheduleDays.length > 0
+        ? body.scheduleDays.map((d: any) => (typeof d === "number" ? d : parseScheduleDays(String(d))[0]))
+        : parseScheduleDays(scheduleText);
+
+      const startDate = body.startDate || new Date().toISOString().slice(0, 10);
+      const startTime = body.startTime || "18:00";
+      const sessionCount = sessionsPerMonth || 8;
+
+      const generated = generateFixedSessions(startDate, scheduleDays, sessionCount, startTime);
+
+      if (generated.length > 0) {
+        await prisma.classSession.createMany({
+          data: generated.map((g) => ({
+            classId: created.id,
+            sessionDate: g.sessionDate,
+            title: g.title,
+            isCompleted: false,
+          })),
+        });
+      }
+    } catch (genErr) {
+      console.warn("Could not pre-generate sessions on class creation:", genErr);
+    }
+
     return NextResponse.json({ class: created });
   } catch (err: any) {
     console.error("POST /api/classes error:", err);

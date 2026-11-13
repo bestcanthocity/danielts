@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { generateFixedSessions, parseScheduleDays, NUMBER_TO_SHORT_NAME } from "@/lib/schedule";
 import {
   Users,
   GraduationCap,
@@ -98,9 +99,12 @@ type Student = {
 
 type SessionHistoryItem = {
   id: string;
+  index?: number;
+  title?: string;
   date: string;
   presentCount: number;
   totalCount: number;
+  isCompleted?: boolean;
 };
 
 type ClassDetail = {
@@ -1010,6 +1014,88 @@ function ClassView({
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "PAUSED" | "FINISHED" | "ALL">("ACTIVE");
+  const [showCustomDate, setShowCustomDate] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Tự động chọn buổi hôm nay hoặc buổi chưa điểm danh đầu tiên
+  useEffect(() => {
+    if (detail && detail.sessionHistory && detail.sessionHistory.length > 0) {
+      const hasCurrent = detail.sessionHistory.some((s) => s.date === date);
+      if (!hasCurrent) {
+        const today = todayStr();
+        const todaySession = detail.sessionHistory.find((s) => s.date === today);
+        if (todaySession) {
+          setDate(todaySession.date);
+        } else {
+          const firstIncomplete = detail.sessionHistory.find((s) => !s.isCompleted);
+          if (firstIncomplete) {
+            setDate(firstIncomplete.date);
+          } else {
+            setDate(detail.sessionHistory[0].date);
+          }
+        }
+      }
+    }
+  }, [detail]);
+
+  const handleInitFixedSessions = async () => {
+    try {
+      setActionLoading(true);
+      await api(`/api/classes/${classId}/sessions`, {
+        method: "POST",
+        body: JSON.stringify({ action: "GENERATE_SCHEDULE" }),
+      });
+      notify("Đã tự động khởi tạo 8 buổi học cố định theo lịch của lớp!");
+      await loadDetail();
+    } catch (e: any) {
+      notify(e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleNextCycle = async () => {
+    if (!window.confirm("Khởi tạo tiếp 8 buổi học cho chu kỳ tháng tiếp theo?")) return;
+    try {
+      setActionLoading(true);
+      await api(`/api/classes/${classId}/sessions`, {
+        method: "POST",
+        body: JSON.stringify({ action: "NEXT_CYCLE" }),
+      });
+      notify("Đã khởi tạo thêm 8 buổi cho chu kỳ tiếp theo!");
+      await loadDetail();
+    } catch (e: any) {
+      notify(e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAddMakeupSession = async () => {
+    const inputDate = window.prompt("Nhập ngày học bù (định dạng YYYY-MM-DD):", todayStr());
+    if (!inputDate || !/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
+      if (inputDate) notify("Ngày không đúng định dạng YYYY-MM-DD");
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await api(`/api/classes/${classId}/sessions`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "ADD_SESSION",
+          date: inputDate,
+          title: `Buổi học bù (${inputDate.slice(8, 10)}/${inputDate.slice(5, 7)})`,
+        }),
+      });
+      notify(`Đã thêm buổi học bù ngày ${fmtDate(inputDate)}!`);
+      setDate(inputDate);
+      await loadDetail();
+    } catch (e: any) {
+      notify(e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const loadDetail = useCallback(async () => {
     try {
@@ -1169,36 +1255,215 @@ function ClassView({
         </button>
       </div>
 
-      {/* THANH ĐIỂM DANH NGÀY HỌC */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-              Ngày điểm danh:
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="px-3.5 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold text-slate-800 shadow-sm"
-            />
-            {date !== todayStr() && (
+      {/* THANH ĐIỂM DANH THEO LỊCH CỐ ĐỊNH & DẢI 8 BUỔI HỌC */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+        {/* TIÊU ĐỀ KHU VỰC VÀ CÁC THAO TÁC QUẢN LÝ LỊCH HỌC */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700">
+                <Calendar className="w-3.5 h-3.5" />
+              </span>
+              <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                Lịch học cố định & Điểm danh buổi học
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5 ml-8">
+              Lịch: <strong className="text-indigo-900 font-bold">{detail.class.scheduleText || "Chưa thiết lập"}</strong>
+              {" · "}
+              {detail.sessionHistory.length > 0 ? (
+                <span>Đã ấn định {detail.sessionHistory.length} buổi (bấm chọn buổi bên dưới để điểm danh)</span>
+              ) : (
+                <span className="text-amber-600 font-semibold">Chưa sinh dải buổi học cố định</span>
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {detail.sessionHistory.length === 0 ? (
               <button
                 type="button"
-                onClick={() => setDate(todayStr())}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition"
+                onClick={handleInitFixedSessions}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm active:scale-95 transition"
               >
-                Hôm nay
+                <Sparkles className="w-3.5 h-3.5" />
+                {actionLoading ? "Đang tạo..." : "Khởi tạo 8 buổi cố định theo lịch"}
               </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleAddMakeupSession}
+                  disabled={actionLoading}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition"
+                  title="Thêm một buổi học bù ngoài các buổi cố định"
+                >
+                  <Plus className="w-3 h-3" />
+                  + Thêm buổi học bù
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextCycle}
+                  disabled={actionLoading}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition"
+                  title="Tạo thêm 8 buổi cho chu kỳ tháng tiếp theo"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  + 8 buổi tháng tiếp
+                </button>
+              </>
             )}
+          </div>
+        </div>
+
+        {/* DẢI CÁC BUỔI HỌC CỐ ĐỊNH (BUỔI 1 -> BUỔI 8) */}
+        {detail.sessionHistory.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
+            {detail.sessionHistory.map((sh, idx) => {
+              const isSelected = sh.date === date;
+              const isToday = sh.date === todayStr();
+              const [, m, d] = sh.date.split("-");
+              const dt = new Date(`${sh.date}T12:00:00Z`);
+              const dayOfWeek = dt.getUTCDay();
+              const shortDay = NUMBER_TO_SHORT_NAME[dayOfWeek] || `T${dayOfWeek + 1}`;
+
+              return (
+                <button
+                  key={sh.id || sh.date}
+                  type="button"
+                  onClick={() => setDate(sh.date)}
+                  className={`relative p-2.5 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400 scale-[1.02]"
+                      : sh.isCompleted
+                      ? "bg-emerald-50/80 text-slate-900 border-emerald-300 hover:bg-emerald-100"
+                      : "bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100/90"
+                  }`}
+                >
+                  {isToday && (
+                    <span
+                      className={`absolute -top-2 -right-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-xs ${
+                        isSelected
+                          ? "bg-amber-300 text-slate-950 font-black"
+                          : "bg-amber-500 text-white"
+                      }`}
+                    >
+                      ⚡ Hôm nay
+                    </span>
+                  )}
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span
+                      className={`text-[10px] font-extrabold uppercase tracking-wide truncate ${
+                        isSelected ? "text-indigo-100 font-black" : "text-slate-400"
+                      }`}
+                    >
+                      {sh.title ? sh.title.split("(")[0].trim() : `Buổi ${idx + 1}`}
+                    </span>
+                  </div>
+
+                  <div className="my-1">
+                    <span className="text-sm font-black tracking-tight block">
+                      {shortDay} · {d}/{m}
+                    </span>
+                  </div>
+
+                  <div className="mt-1 pt-1.5 border-t border-black/5 flex items-center justify-between gap-1">
+                    {sh.isCompleted ? (
+                      <span
+                        className={`text-[10px] font-bold flex items-center gap-1 ${
+                          isSelected ? "text-emerald-200" : "text-emerald-700"
+                        }`}
+                      >
+                        <Check className="w-3 h-3 stroke-[2.5]" />
+                        {sh.presentCount}/{sh.totalCount || detail.students.length}
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-semibold ${
+                          isSelected ? "text-indigo-200" : "text-slate-400"
+                        }`}
+                      >
+                        ● Chưa lưu
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🗓️</span>
+              <div>
+                <p className="text-xs font-bold text-amber-900">
+                  Lớp này chưa có danh sách 8 buổi học ấn định
+                </p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Bấm khởi tạo để tự động chốt 8 buổi học chuẩn theo lịch ({detail.class.scheduleText || "Thứ 3, Thứ 5"}), giúp điểm danh 1 chạm siêu nhanh!
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleInitFixedSessions}
+              disabled={actionLoading}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm whitespace-nowrap active:scale-95 transition"
+            >
+              {actionLoading ? "Đang tạo..." : "Khởi tạo ngay 8 buổi"}
+            </button>
+          </div>
+        )}
+
+        {/* THANH ĐIỀU KHIỂN ĐIỂM DANH CHO BUỔI ĐANG CHỌN */}
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                Đang điểm danh:
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-black">
+                {fmtDate(date)}
+              </span>
+            </div>
+
             {saved ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-                <Check className="w-3.5 h-3.5" /> Đã lưu buổi này
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Đã lưu buổi này
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
                 <Clock className="w-3.5 h-3.5" /> Chưa lưu điểm danh
               </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowCustomDate(!showCustomDate)}
+              className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 underline ml-1"
+            >
+              {showCustomDate ? "Ẩn chọn ngày khác" : "Chọn ngày khác ngoài lịch"}
+            </button>
+
+            {showCustomDate && (
+              <div className="flex items-center gap-1.5 animate-fadeIn">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="px-2.5 py-1 rounded-xl border border-slate-300 text-xs font-extrabold text-slate-800 shadow-xs"
+                />
+                {date !== todayStr() && (
+                  <button
+                    type="button"
+                    onClick={() => setDate(todayStr())}
+                    className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition"
+                  >
+                    Hôm nay
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -1247,33 +1512,6 @@ function ClassView({
             </button>
           </div>
         </div>
-
-        {/* NHÃN CÁC NGÀY ĐÃ ĐIỂM DANH */}
-        {detail.sessionHistory.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-3 border-t border-slate-100">
-            <span className="text-[11px] font-bold text-slate-400 mr-1">
-              Đã điểm danh:
-            </span>
-            {detail.sessionHistory.slice(0, 10).map((sh) => {
-              const active = sh.date === date;
-              const [, m, d] = sh.date.split("-");
-              return (
-                <button
-                  key={sh.id}
-                  type="button"
-                  onClick={() => setDate(sh.date)}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold border transition ${
-                    active
-                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/20"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  {d}/{m} ({sh.presentCount}/{sh.totalCount})
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* THANH LỌC TRẠNG THÁI HỌC VIÊN */}
@@ -2089,6 +2327,7 @@ function AddClassModal({
   const [selectedDays, setSelectedDays] = useState<string[]>(["Thứ 3", "Thứ 5"]);
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:30");
+  const [startDate, setStartDate] = useState(todayStr());
   const [isCustomSchedule, setIsCustomSchedule] = useState(false);
   const [customScheduleText, setCustomScheduleText] = useState("");
 
@@ -2114,6 +2353,17 @@ function AddClassModal({
 
   const finalSchedule = isCustomSchedule ? customScheduleText : generatedSchedule;
 
+  const targetDaysNum = isCustomSchedule
+    ? parseScheduleDays(customScheduleText)
+    : parseScheduleDays(selectedDays.join(", "));
+
+  const previewSessions = generateFixedSessions(
+    startDate,
+    targetDaysNum,
+    type === "MONTHLY" ? 8 : 12,
+    startTime
+  );
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
@@ -2124,6 +2374,9 @@ function AddClassModal({
           name,
           type,
           scheduleText: finalSchedule,
+          scheduleDays: targetDaysNum,
+          startDate,
+          startTime,
           monthlyTuition: fee,
           pricePerSession: type === "MONTHLY" ? pricePerSession : undefined,
         }),
@@ -2190,6 +2443,20 @@ function AddClassModal({
             placeholder="VD: Tiếng Anh THCS / IELTS 6.5+"
             value={name}
             onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        {/* NGÀY BẮT ĐẦU / KHAI GIẢNG */}
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Ngày bắt đầu khóa / chu kỳ (Khai giảng) *
+          </label>
+          <input
+            type="date"
+            className={inputCls}
+            required
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
           />
         </div>
 
@@ -2336,6 +2603,37 @@ function AddClassModal({
               </div>
             </div>
           )}
+        </div>
+
+        {/* DỰ KIẾN 8 BUỔI HỌC ẤN ĐỊNH CỐ ĐỊNH */}
+        <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200/80 space-y-2">
+          <div className="flex items-center justify-between text-xs font-extrabold text-indigo-900">
+            <span className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              Ấn định sẵn 8 buổi học cố định:
+            </span>
+            <span className="text-[10px] text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md font-bold">
+              ✓ Điểm danh 1 chạm
+            </span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            {previewSessions.slice(0, 8).map((ps) => (
+              <div
+                key={ps.index}
+                className="p-1.5 bg-white rounded-xl border border-indigo-200/80 text-center shadow-xs"
+              >
+                <span className="text-[10px] font-bold text-slate-400 block">Buổi {ps.index}</span>
+                <span className="text-xs font-black text-indigo-950 block">
+                  {ps.shortDay} · {ps.dateStr.slice(8, 10)}/{ps.dateStr.slice(5, 7)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[10px] text-slate-500 leading-tight">
+            💡 Khi tạo lớp, hệ thống sẽ chốt cố định 8 buổi này. Đến ngày học giáo viên chỉ cần bấm chọn buổi để điểm danh, không cần chọn ngày thủ công!
+          </p>
         </div>
 
         <div>
