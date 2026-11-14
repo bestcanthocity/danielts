@@ -48,7 +48,11 @@ import {
   Medal,
   Printer,
   ExternalLink,
-  User
+  User,
+  Lock,
+  Unlock,
+  KeyRound,
+  ShieldAlert
 } from "lucide-react";
 
 type ClassType = "MONTHLY" | "COURSE";
@@ -215,6 +219,189 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
+/* ========================================================================= */
+/* MODAL XÁC THỰC MÃ PIN QUẢN TRỊ VIÊN (ADMIN PIN AUTHENTICATION)            */
+/* ========================================================================= */
+function AdminPinModal({
+  reason,
+  onSuccess,
+  onClose,
+}: {
+  reason?: string;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+
+  const handleVerify = async (pinValue?: string) => {
+    const code = (pinValue !== undefined ? pinValue : pin).trim();
+    if (!code) {
+      setErr("Vui lòng nhập mã PIN Quản trị.");
+      return;
+    }
+    try {
+      setLoading(true);
+      setErr("");
+      const res = await fetch("/api/admin/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Mã PIN Quản trị không chính xác.");
+      }
+      onSuccess();
+    } catch (e: any) {
+      setErr(e.message || "Mã PIN Quản trị không chính xác.");
+      setPin("");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleVerify();
+  };
+
+  const handlePressNum = (num: string) => {
+    if (pin.length < 8) {
+      const next = pin + num;
+      setPin(next);
+      setErr("");
+      if (next.length === 4) {
+        handleVerify(next);
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    setPin((prev) => prev.slice(0, -1));
+    setErr("");
+  };
+
+  return (
+    <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 my-8 border border-slate-100 animate-in zoom-in-95 duration-150">
+        <div className="text-center space-y-2">
+          <div className="w-13 h-13 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-sm">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-black text-slate-900">
+            Xác thực Quyền Quản trị viên
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed px-2">
+            {reason || "Nội dung học phí & cấu hình thuộc quyền Quản trị viên (Admin). Vui lòng nhập mã PIN để mở khóa."}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <input
+              type={showPin ? "text" : "password"}
+              inputMode="numeric"
+              maxLength={8}
+              autoFocus
+              placeholder="••••"
+              className="w-full text-center text-2xl tracking-[0.4em] font-mono font-black py-3 px-10 rounded-2xl border-2 border-slate-300 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 transition bg-slate-50"
+              value={pin}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "");
+                setPin(val);
+                setErr("");
+                if (val.length === 4) {
+                  handleVerify(val);
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPin(!showPin)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+              title={showPin ? "Ẩn PIN" : "Hiện PIN"}
+            >
+              {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {err && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold text-center">
+              ⚠️ {err}
+            </div>
+          )}
+
+          {/* BÀN PHÍM CẢM ỨNG NUMPAD CHO ĐIỆN THOẠI & TABLET */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => handlePressNum(n)}
+                className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-base transition active:scale-95 flex items-center justify-center shadow-2xs"
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={handleBackspace}
+              className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition active:scale-95 flex items-center justify-center"
+              title="Xóa 1 số"
+            >
+              ⌫ Xóa
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePressNum("0")}
+              className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-base transition active:scale-95 flex items-center justify-center shadow-2xs"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPin("");
+                setErr("");
+              }}
+              className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition active:scale-95 flex items-center justify-center"
+              title="Xóa hết"
+            >
+              C
+            </button>
+          </div>
+
+          <div className="text-center">
+            <span className="text-[11px] text-slate-400 font-medium">
+              💡 Mã PIN mặc định: <strong className="text-indigo-600 font-bold">8888</strong>
+            </span>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-50 transition"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !pin}
+              className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-95 disabled:opacity-50"
+            >
+              {loading ? "Đang xác thực..." : "Mở khóa Admin"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -223,6 +410,66 @@ export default function Page() {
   const [toast, setToast] = useState("");
   const [classFilter, setClassFilter] = useState<"ALL" | "TODAY" | "NEEDS_COLLECTION" | "ACTIVE" | "EMPTY">("ALL");
   const [searchClassQuery, setSearchClassQuery] = useState("");
+
+  // PHÂN QUYỀN VAI TRÒ: ADMIN (Mở khóa bằng PIN) & GIÁO VIÊN (Mặc định)
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinReason, setPinReason] = useState("");
+  const [pendingAdminAction, setPendingAdminAction] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    try {
+      const unlocked = localStorage.getItem("danielts_admin_unlocked");
+      const unlockedAt = Number(localStorage.getItem("danielts_admin_unlocked_at") || 0);
+      const eightHours = 8 * 60 * 60 * 1000;
+      if (unlocked === "true" && Date.now() - unlockedAt < eightHours) {
+        setIsAdmin(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const requireAdmin = useCallback((action?: () => void, reason?: string) => {
+    if (isAdmin) {
+      if (action) action();
+      return true;
+    }
+    setPinReason(reason || "Thao tác này thuộc thẩm quyền Quản trị viên (Admin). Vui lòng nhập mã PIN để tiếp tục.");
+    setPendingAdminAction(() => action || null);
+    setShowPinModal(true);
+    return false;
+  }, [isAdmin]);
+
+  const handleUnlockAdmin = () => {
+    setIsAdmin(true);
+    try {
+      localStorage.setItem("danielts_admin_unlocked", "true");
+      localStorage.setItem("danielts_admin_unlocked_at", Date.now().toString());
+    } catch {
+      // ignore
+    }
+    setShowPinModal(false);
+    notify("👑 Đã mở khóa quyền Quản trị viên (Admin)!");
+    if (pendingAdminAction) {
+      pendingAdminAction();
+      setPendingAdminAction(null);
+    }
+  };
+
+  const handleLockAdmin = () => {
+    setIsAdmin(false);
+    try {
+      localStorage.removeItem("danielts_admin_unlocked");
+      localStorage.removeItem("danielts_admin_unlocked_at");
+    } catch {
+      // ignore
+    }
+    if (viewMode === "STATS") {
+      setViewMode("CLASSES");
+    }
+    notify("🔒 Đã chuyển về Chế độ Giáo viên (Chỉ điểm danh & chuyên môn).");
+  };
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -244,6 +491,13 @@ export default function Page() {
 
   const handleDeleteClass = async (e: React.MouseEvent, cls: ClassItem) => {
     e.stopPropagation();
+    if (!isAdmin) {
+      requireAdmin(
+        () => handleDeleteClass(e, cls),
+        "Thao tác xóa lớp học thuộc quyền Quản trị viên (Admin)."
+      );
+      return;
+    }
     if (!window.confirm(`Bạn có chắc muốn xóa lớp "${cls.name}" không?`))
       return;
     try {
@@ -327,7 +581,36 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            {/* BADGE CHẾ ĐỘ PHÂN QUYỀN VAI TRÒ */}
+            {isAdmin ? (
+              <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-2xl text-xs font-black text-emerald-900 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>👑 Admin</span>
+                <button
+                  type="button"
+                  onClick={handleLockAdmin}
+                  className="ml-1 text-[11px] text-emerald-700 hover:text-emerald-950 underline font-semibold"
+                  title="Bấm để khóa lại và chuyển về Chế độ Giáo viên"
+                >
+                  Khóa 🔒
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => requireAdmin(undefined, "Nhập mã PIN để mở khóa toàn bộ quyền Quản trị viên (Học phí, Cấu hình, Doanh thu).")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black transition shadow-2xs group"
+                title="Đang ở Chế độ Giáo viên (Chuyên môn & Điểm danh). Bấm để nhập PIN mở khóa Admin"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+                <span>👨‍🏫 Giáo viên</span>
+                <span className="text-[10px] text-amber-700 underline font-normal hidden sm:inline ml-0.5">
+                  Mở Admin 🔓
+                </span>
+              </button>
+            )}
+
             {/* Chuyển đổi Segmented Pill */}
             <div className="flex items-center bg-slate-100/80 p-1 rounded-2xl border border-slate-200/80 text-xs font-bold shadow-inner">
               <button
@@ -349,6 +632,16 @@ export default function Page() {
               <button
                 type="button"
                 onClick={() => {
+                  if (!isAdmin) {
+                    requireAdmin(
+                      () => {
+                        setOpenId(null);
+                        setViewMode("STATS");
+                      },
+                      "Chức năng xem Báo cáo Tài chính & Doanh thu thuộc quyền Quản trị viên (Admin). Vui lòng nhập mã PIN."
+                    );
+                    return;
+                  }
                   setOpenId(null);
                   setViewMode("STATS");
                 }}
@@ -359,7 +652,8 @@ export default function Page() {
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-                Thống kê Quản trị
+                <span>Thống kê Quản trị</span>
+                {!isAdmin && <Lock className="w-3 h-3 text-slate-400" />}
               </button>
             </div>
 
@@ -376,7 +670,12 @@ export default function Page() {
             ) : (
               viewMode === "CLASSES" && (
                 <button
-                  onClick={() => setShowAddClass(true)}
+                  onClick={() => {
+                    requireAdmin(
+                      () => setShowAddClass(true),
+                      "Chức năng tạo lớp học mới thuộc quyền Quản trị viên (Admin)."
+                    );
+                  }}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
                 >
                   <Plus className="w-4 h-4" />
@@ -399,7 +698,12 @@ export default function Page() {
             }}
           />
         ) : openId ? (
-          <ClassView classId={openId} notify={notify} />
+          <ClassView
+            classId={openId}
+            notify={notify}
+            isAdmin={isAdmin}
+            requireAdmin={requireAdmin}
+          />
         ) : (
           <div className="space-y-6">
             {/* TẦNG 1: EXECUTIVE KPI SUMMARY BENTO CARDS */}
@@ -878,6 +1182,17 @@ export default function Page() {
             setShowAddClass(false);
             notify("Đã thêm lớp mới");
             loadClasses();
+          }}
+        />
+      )}
+
+      {showPinModal && (
+        <AdminPinModal
+          reason={pinReason}
+          onSuccess={handleUnlockAdmin}
+          onClose={() => {
+            setShowPinModal(false);
+            setPendingAdminAction(null);
           }}
         />
       )}
@@ -1412,6 +1727,7 @@ function StatsView({
         <StudentDossierModal
           studentId={dossierTarget.studentId}
           classId={dossierTarget.classId}
+          isAdmin={true}
           onClose={() => setDossierTarget(null)}
           onSaved={async () => {
             notify("Đã cập nhật hồ sơ học viên!");
@@ -1429,9 +1745,13 @@ function StatsView({
 function ClassView({
   classId,
   notify,
+  isAdmin,
+  requireAdmin,
 }: {
   classId: string;
   notify: (m: string) => void;
+  isAdmin: boolean;
+  requireAdmin: (action?: () => void, reason?: string) => boolean;
 }) {
   const [detail, setDetail] = useState<ClassDetail | null>(null);
   const [date, setDate] = useState(todayStr());
@@ -1824,7 +2144,12 @@ Trân trọng cảm ơn Quý phụ huynh!`;
         </div>
 
         <button
-          onClick={() => setShowAddStudent(true)}
+          onClick={() => {
+            requireAdmin(
+              () => setShowAddStudent(true),
+              "Chức năng thêm học viên vào lớp thuộc quyền Quản trị viên (Admin)."
+            );
+          }}
           className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition"
         >
           <Plus className="w-4 h-4" />
@@ -2595,10 +2920,16 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                           </span>
                           <button
                             type="button"
-                            onClick={() => setPayFor(s)}
-                            className="text-[11px] font-extrabold text-indigo-600 hover:underline"
+                            onClick={() => {
+                              requireAdmin(
+                                () => setPayFor(s),
+                                "Thao tác nạp học phí thuộc quyền Quản trị viên (Admin). Vui lòng nhập mã PIN."
+                              );
+                            }}
+                            className="text-[11px] font-extrabold text-indigo-600 hover:underline flex items-center gap-1"
                           >
-                            + Nạp phí
+                            {!isAdmin && <Lock className="w-2.5 h-2.5 text-slate-400" />}
+                            <span>+ Nạp phí</span>
                           </button>
                         </div>
 
@@ -2624,7 +2955,12 @@ Trân trọng cảm ơn Quý phụ huynh!`;
 
                         {s.tuitionNote ? (
                           <div
-                            onClick={() => setNoteFor(s)}
+                            onClick={() => {
+                              requireAdmin(
+                                () => setNoteFor(s),
+                                "Thao tác sửa ghi chú & hạn học phí thuộc quyền Quản trị viên (Admin)."
+                              );
+                            }}
                             className="cursor-pointer p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center justify-between"
                           >
                             <span>📌 {s.tuitionNote}</span>
@@ -2633,7 +2969,12 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setNoteFor(s)}
+                            onClick={() => {
+                              requireAdmin(
+                                () => setNoteFor(s),
+                                "Thao tác thêm ghi chú & hạn học phí thuộc quyền Quản trị viên (Admin)."
+                              );
+                            }}
                             className="text-[11px] text-slate-400 hover:text-indigo-600 font-medium"
                           >
                             + Thêm ghi chú học phí
@@ -2674,7 +3015,12 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemoveStudent(s)}
+                            onClick={() => {
+                              requireAdmin(
+                                () => handleRemoveStudent(s),
+                                "Thao tác xóa học viên khỏi lớp thuộc quyền Quản trị viên (Admin)."
+                              );
+                            }}
                             className="text-[11px] font-bold text-rose-500 hover:text-rose-700"
                           >
                             Xóa khỏi lớp
@@ -2789,11 +3135,16 @@ Trân trọng cảm ơn Quý phụ huynh!`;
                       {/* NÚT NẠP HỌC PHÍ */}
                       <button
                         type="button"
-                        onClick={() => setPayFor(s)}
+                        onClick={() => {
+                          requireAdmin(
+                            () => setPayFor(s),
+                            "Thao tác nạp học phí thuộc quyền Quản trị viên (Admin). Vui lòng nhập mã PIN."
+                          );
+                        }}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs active:scale-95 transition"
                       >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        Nạp học phí
+                        {isAdmin ? <CreditCard className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5 text-indigo-200" />}
+                        <span>Nạp học phí</span>
                       </button>
                     </div>
                   </div>
@@ -2869,6 +3220,8 @@ Trân trọng cảm ơn Quý phụ huynh!`;
         <StudentDossierModal
           studentId={dossierStudentId}
           classId={classId}
+          isAdmin={isAdmin}
+          requireAdmin={requireAdmin}
           onClose={() => setDossierStudentId(null)}
           onSaved={async () => {
             notify("Đã cập nhật hồ sơ học viên!");
@@ -2888,11 +3241,15 @@ function StudentDossierModal({
   classId,
   onClose,
   onSaved,
+  isAdmin,
+  requireAdmin,
 }: {
   studentId: string;
   classId?: string;
   onClose: () => void;
   onSaved: () => void;
+  isAdmin?: boolean;
+  requireAdmin?: (action?: () => void, reason?: string) => boolean;
 }) {
   const [dossier, setDossier] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -3013,6 +3370,13 @@ function StudentDossierModal({
   };
 
   const handleDeletePayment = async (p: any) => {
+    if (!isAdmin && requireAdmin) {
+      requireAdmin(
+        () => handleDeletePayment(p),
+        "Thao tác hủy phiếu thu và khôi phục công nợ thuộc quyền Quản trị viên (Admin)."
+      );
+      return;
+    }
     if (
       !window.confirm(
         `Hủy phiếu thu ${vnd(p.amount)} ngày ${fmtDate(
