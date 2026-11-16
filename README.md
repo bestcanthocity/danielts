@@ -23,3 +23,5 @@ Mở trình duyệt tại: `http://localhost:3005`
 - **Admin / Kế toán:** `admin@danielts.vn`
 - **Giáo viên:** `teacher@danielts.vn`
 - **Học viên / Phụ huynh:** `DAN-001`, `DAN-002`, `DAN-003`, `DAN-004`, `DAN-006`
+
+<!-- Trigger auto deployment: 2026-11-16T16:10:00Z -->
