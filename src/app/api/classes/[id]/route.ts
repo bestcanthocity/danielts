@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateStudentTuition } from "@/lib/tuition-calculator";
+import { generateFixedSessions, parseScheduleDays } from "@/lib/schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -312,7 +313,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   return NextResponse.json({ ok: true });
 }
 
-// CẬP NHẬT TRẠNG THÁI HỌC VIÊN HOẶC XÓA LỚP
+// CẬP NHẬT TRẠNG THÁI HỌC VIÊN HOẶC CẤU HÌNH LỚP HỌC
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const body = await req.json();
   const { enrollmentId, status } = body;
@@ -323,6 +324,72 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       data: { status }, // ACTIVE | PAUSED | FINISHED
     });
     return NextResponse.json({ ok: true });
+  }
+
+  // CẬP NHẬT THÔNG TIN LỚP HỌC (TÊN, LỊCH HỌC, HỌC PHÍ, LOẠI HÌNH)
+  if (
+    body.name !== undefined ||
+    body.scheduleText !== undefined ||
+    body.monthlyTuition !== undefined ||
+    body.pricePerSession !== undefined ||
+    body.type !== undefined
+  ) {
+    const updateData: any = {};
+    if (body.name) updateData.name = body.name.trim();
+    if (body.scheduleText !== undefined) updateData.scheduleText = body.scheduleText.trim();
+    if (body.type) updateData.type = body.type;
+    if (body.monthlyTuition !== undefined) updateData.monthlyTuition = Number(body.monthlyTuition);
+    if (body.pricePerSession !== undefined) updateData.pricePerSession = Number(body.pricePerSession);
+
+    const updated = await prisma.classRoom.update({
+      where: { id: params.id },
+      data: updateData,
+    });
+
+    // Nếu có yêu cầu cập nhật lại các buổi học chưa điểm danh
+    if (body.updateSessions && body.startDate && Array.isArray(body.scheduleDays)) {
+      try {
+        const sessionCount = updated.sessionsPerMonth || 8;
+        const generated = generateFixedSessions(
+          body.startDate,
+          body.scheduleDays,
+          sessionCount,
+          body.startTime || "18:00"
+        );
+
+        if (generated.length > 0) {
+          // Xóa các buổi học CHƯA điểm danh (chưa có attendance record nào)
+          const existingSessions = await prisma.classSession.findMany({
+            where: { classId: params.id },
+            include: { attendances: true },
+          });
+
+          const emptySessionIds = existingSessions
+            .filter((s) => s.attendances.length === 0)
+            .map((s) => s.id);
+
+          if (emptySessionIds.length > 0) {
+            await prisma.classSession.deleteMany({
+              where: { id: { in: emptySessionIds } },
+            });
+          }
+
+          // Tạo các buổi học mới theo lịch đã chọn
+          await prisma.classSession.createMany({
+            data: generated.map((g) => ({
+              classId: params.id,
+              sessionDate: g.sessionDate,
+              title: g.title,
+              isCompleted: false,
+            })),
+          });
+        }
+      } catch (sessErr) {
+        console.warn("Could not regenerate sessions on class edit:", sessErr);
+      }
+    }
+
+    return NextResponse.json({ ok: true, class: updated });
   }
 
   return NextResponse.json({ error: "Tham số không hợp lệ." }, { status: 400 });

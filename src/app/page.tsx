@@ -410,6 +410,7 @@ export default function Page() {
   const [toast, setToast] = useState("");
   const [classFilter, setClassFilter] = useState<"ALL" | "TODAY" | "NEEDS_COLLECTION" | "ACTIVE" | "EMPTY">("ALL");
   const [searchClassQuery, setSearchClassQuery] = useState("");
+  const [editingClass, setEditingClass] = useState<any | null>(null);
 
   // PHÂN QUYỀN VAI TRÒ: ADMIN (Mở khóa bằng PIN) & GIÁO VIÊN (Mặc định)
   const [isAdmin, setIsAdmin] = useState(false);
@@ -703,6 +704,7 @@ export default function Page() {
             notify={notify}
             isAdmin={isAdmin}
             requireAdmin={requireAdmin}
+            onEditClass={(clsToEdit) => setEditingClass(clsToEdit)}
           />
         ) : (
           <div className="space-y-6">
@@ -1058,14 +1060,30 @@ export default function Page() {
                           )}
                         </span>
 
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteClass(e, c)}
-                          title="Xóa lớp này"
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requireAdmin(
+                                () => setEditingClass(c),
+                                "Thao tác sửa cấu hình & lịch học của lớp thuộc quyền Quản trị viên (Admin)."
+                              );
+                            }}
+                            title="Chỉnh sửa lịch & thông tin lớp"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteClass(e, c)}
+                            title="Xóa lớp này"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <h3 className="font-black text-slate-900 text-lg mt-2.5 group-hover:text-indigo-600 transition-colors leading-snug">
@@ -1181,6 +1199,18 @@ export default function Page() {
           onDone={() => {
             setShowAddClass(false);
             notify("Đã thêm lớp mới");
+            loadClasses();
+          }}
+        />
+      )}
+
+      {editingClass && (
+        <EditClassModal
+          cls={editingClass}
+          onClose={() => setEditingClass(null)}
+          onDone={() => {
+            setEditingClass(null);
+            notify("Đã cập nhật cấu hình & lịch lớp!");
             loadClasses();
           }}
         />
@@ -1747,11 +1777,13 @@ function ClassView({
   notify,
   isAdmin,
   requireAdmin,
+  onEditClass,
 }: {
   classId: string;
   notify: (m: string) => void;
   isAdmin: boolean;
   requireAdmin: (action?: () => void, reason?: string) => boolean;
+  onEditClass?: (cls: any) => void;
 }) {
   const [detail, setDetail] = useState<ClassDetail | null>(null);
   const [date, setDate] = useState(todayStr());
@@ -2143,18 +2175,36 @@ Trân trọng cảm ơn Quý phụ huynh!`;
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            requireAdmin(
-              () => setShowAddStudent(true),
-              "Chức năng thêm học viên vào lớp thuộc quyền Quản trị viên (Admin)."
-            );
-          }}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition"
-        >
-          <Plus className="w-4 h-4" />
-          Thêm học viên vào lớp
-        </button>
+        <div className="flex items-center gap-2">
+          {onEditClass && (
+            <button
+              type="button"
+              onClick={() => {
+                requireAdmin(
+                  () => onEditClass(detail.class),
+                  "Thao tác sửa lịch & cấu hình lớp thuộc quyền Quản trị viên (Admin)."
+                );
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition active:scale-95 border border-slate-200/80"
+            >
+              <Edit3 className="w-4 h-4 text-indigo-600" />
+              <span>Sửa lịch & cấu hình lớp</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              requireAdmin(
+                () => setShowAddStudent(true),
+                "Chức năng thêm học viên vào lớp thuộc quyền Quản trị viên (Admin)."
+              );
+            }}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm học viên vào lớp
+          </button>
+        </div>
       </div>
 
       {/* THANH ĐIỂM DANH THEO LỊCH CỐ ĐỊNH & DẢI 8 BUỔI HỌC */}
@@ -4718,6 +4768,462 @@ function Modal({
 
 const inputCls = "w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition";
 
+/* ========================================================================= */
+/* BỘ CHỌN LỊCH HỌC TRỰC QUAN MỞ LỊCH THÁNG (INTERACTIVE CALENDAR PICKER)    */
+/* ========================================================================= */
+function InteractiveCalendarSchedulePicker({
+  startDate,
+  setStartDate,
+  selectedDays,
+  setSelectedDays,
+  startTime,
+  setStartTime,
+  endTime,
+  setEndTime,
+  isCustomSchedule,
+  setIsCustomSchedule,
+  customScheduleText,
+  setCustomScheduleText,
+  sessionCount = 8,
+}: {
+  startDate: string;
+  setStartDate: (d: string) => void;
+  selectedDays: string[];
+  setSelectedDays: (days: string[]) => void;
+  startTime: string;
+  setStartTime: (t: string) => void;
+  endTime: string;
+  setEndTime: (t: string) => void;
+  isCustomSchedule: boolean;
+  setIsCustomSchedule: (b: boolean) => void;
+  customScheduleText: string;
+  setCustomScheduleText: (t: string) => void;
+  sessionCount?: number;
+}) {
+  const [pickerTab, setPickerTab] = useState<"CALENDAR" | "PRESETS" | "MANUAL">("CALENDAR");
+
+  // Tháng/năm đang xem trên giao diện lịch
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    const [y, m] = (startDate || todayStr()).split("-").map(Number);
+    return new Date(y, (m || 1) - 1, 1);
+  });
+
+  const calYear = viewDate.getFullYear();
+  const calMonth = viewDate.getMonth(); // 0..11
+
+  const prevMonth = () => setViewDate(new Date(calYear, calMonth - 1, 1));
+  const nextMonth = () => setViewDate(new Date(calYear, calMonth + 1, 1));
+  const goToday = () => {
+    const now = new Date();
+    setViewDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    setStartDate(todayStr());
+  };
+
+  const ALL_DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
+  const DAY_COLS = [
+    { key: "Thứ 2", label: "T2", dow: 1 },
+    { key: "Thứ 3", label: "T3", dow: 2 },
+    { key: "Thứ 4", label: "T4", dow: 3 },
+    { key: "Thứ 5", label: "T5", dow: 4 },
+    { key: "Thứ 6", label: "T6", dow: 5 },
+    { key: "Thứ 7", label: "T7", dow: 6 },
+    { key: "Chủ Nhật", label: "CN", dow: 0 },
+  ];
+
+  const toggleDay = (day: string) => {
+    if (selectedDays.includes(day)) {
+      if (selectedDays.length === 1) return;
+      setSelectedDays(selectedDays.filter((d) => d !== day));
+    } else {
+      setSelectedDays([...selectedDays, day]);
+    }
+  };
+
+  const targetDaysNum = isCustomSchedule
+    ? parseScheduleDays(customScheduleText)
+    : parseScheduleDays(selectedDays.join(", "));
+
+  const previewSessions = generateFixedSessions(
+    startDate,
+    targetDaysNum,
+    sessionCount,
+    startTime
+  );
+
+  // Map ngày -> buổi học (O(1) lookup)
+  const sessionMap = React.useMemo(() => {
+    const map: Record<string, { index: number; title: string }> = {};
+    previewSessions.forEach((s) => {
+      map[s.dateStr] = { index: s.index, title: s.title };
+    });
+    return map;
+  }, [previewSessions]);
+
+  // Lưới lịch tháng (bắt đầu từ Thứ 2)
+  const firstDayDow = new Date(calYear, calMonth, 1).getDay(); // 0..6
+  const offset = (firstDayDow + 6) % 7; // Thứ 2 = 0, CN = 6
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  const generatedSchedule =
+    selectedDays.length > 0
+      ? `${selectedDays.join(", ")} (${startTime} - ${endTime})`
+      : "";
+
+  return (
+    <div className="space-y-3">
+      {/* THANH TAB CHỌN CHẾ ĐỘ */}
+      <div className="flex items-center justify-between gap-1.5 p-1 bg-slate-100 rounded-2xl">
+        <button
+          type="button"
+          onClick={() => {
+            setPickerTab("CALENDAR");
+            setIsCustomSchedule(false);
+          }}
+          className={`flex-1 py-1.5 px-2 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition ${
+            pickerTab === "CALENDAR" && !isCustomSchedule
+              ? "bg-white text-indigo-700 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Mở Lịch Tháng Trực Quan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPickerTab("PRESETS");
+            setIsCustomSchedule(false);
+          }}
+          className={`flex-1 py-1.5 px-2 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition ${
+            pickerTab === "PRESETS" && !isCustomSchedule
+              ? "bg-white text-indigo-700 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          <span>Chọn Nhanh Ca Học</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPickerTab("MANUAL");
+            if (!isCustomSchedule) setCustomScheduleText(generatedSchedule);
+            setIsCustomSchedule(true);
+          }}
+          className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold transition ${
+            isCustomSchedule
+              ? "bg-white text-indigo-700 shadow-xs"
+              : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          ✍️ Nhập tay
+        </button>
+      </div>
+
+      {/* CHẾ ĐỘ 1: MỞ LỊCH THÁNG TRỰC QUAN (CALENDAR GRID) */}
+      {!isCustomSchedule && pickerTab === "CALENDAR" && (
+        <div className="p-3.5 bg-gradient-to-b from-indigo-50/50 via-white to-white rounded-2xl border border-indigo-200/80 shadow-xs space-y-3">
+          {/* HEADER LỊCH */}
+          <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                Tháng {calMonth + 1} / {calYear}
+              </span>
+              <button
+                type="button"
+                onClick={goToday}
+                className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition"
+              >
+                Hôm nay
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={prevMonth}
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-indigo-100 hover:text-indigo-700 transition font-bold"
+                title="Tháng trước"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-indigo-100 hover:text-indigo-700 transition font-bold"
+                title="Tháng sau"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-500 leading-tight">
+            💡 <strong>Bấm vào tiêu đề thứ (T2..CN)</strong> để chọn ngày học trong tuần · <strong>Bấm vào ô ngày bất kỳ</strong> để chọn ngày khai giảng bắt đầu tính dải {sessionCount} buổi.
+          </p>
+
+          {/* LƯỚI LỊCH 7 CỘT */}
+          <div className="grid grid-cols-7 gap-1">
+            {/* HÀNG TIÊU ĐỀ THỨ TRONG TUẦN */}
+            {DAY_COLS.map((col) => {
+              const active = selectedDays.includes(col.key);
+              return (
+                <button
+                  key={col.key}
+                  type="button"
+                  onClick={() => toggleDay(col.key)}
+                  title={`Bấm để ${active ? "bỏ chọn" : "chọn"} ${col.key}`}
+                  className={`py-1.5 rounded-xl text-center text-[11px] font-black transition ${
+                    active
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  {col.label}
+                  {active && <span className="block text-[8px] leading-none">✓</span>}
+                </button>
+              );
+            })}
+
+            {/* Ô TRỐNG PADDING ĐẦU THÁNG */}
+            {Array.from({ length: offset }).map((_, i) => (
+              <div key={`empty-${i}`} className="h-10 rounded-xl bg-slate-50/50" />
+            ))}
+
+            {/* CÁC NGÀY TRONG THÁNG */}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const dayNum = i + 1;
+              const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+              const isStart = startDate === dateStr;
+              const sessionInfo = sessionMap[dateStr];
+              const dateObj = new Date(calYear, calMonth, dayNum);
+              const dow = dateObj.getDay();
+              const dayName = NUMBER_TO_DAY_NAME[dow];
+              const isSelectedDow = selectedDays.includes(dayName);
+
+              return (
+                <button
+                  key={dateStr}
+                  type="button"
+                  onClick={() => setStartDate(dateStr)}
+                  title={`Ngày ${dayNum}/${calMonth + 1} (${dayName})${sessionInfo ? ` - Buổi ${sessionInfo.index}` : ""}${isStart ? " [Khai giảng]" : ""}`}
+                  className={`h-11 rounded-xl p-1 text-center transition flex flex-col items-center justify-between relative ${
+                    sessionInfo
+                      ? "bg-indigo-600 text-white font-black shadow-xs ring-2 ring-indigo-400/50"
+                      : isStart
+                      ? "bg-amber-100 border-2 border-amber-500 text-amber-900 font-extrabold"
+                      : isSelectedDow
+                      ? "bg-indigo-50/70 text-indigo-900 border border-indigo-200/50 hover:bg-indigo-100"
+                      : "bg-white text-slate-700 border border-slate-100 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className={`text-[11px] ${sessionInfo ? "font-black" : "font-semibold"}`}>
+                    {dayNum}
+                  </span>
+
+                  {sessionInfo ? (
+                    <span className="text-[8px] px-1 py-0.2 rounded bg-white/30 text-white font-black leading-none">
+                      B{sessionInfo.index}
+                    </span>
+                  ) : isStart ? (
+                    <span className="text-[8px] text-amber-800 font-bold leading-none">
+                      🚩 Start
+                    </span>
+                  ) : (
+                    <span className="h-2" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-100 text-slate-600">
+            <span>Ngày khai giảng: <strong className="text-indigo-700 font-bold">{fmtDate(startDate)}</strong></span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded bg-indigo-600 inline-block"></span> Buổi học ấn định
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* CHẾ ĐỘ 2: CHỌN NHANH CA HỌC (QUICK PRESETS) */}
+      {!isCustomSchedule && pickerTab === "PRESETS" && (
+        <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+          <span className="text-xs font-bold text-slate-700 block">
+            Chọn các ngày cố định trong tuần:
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: "Thứ 3, 5", days: ["Thứ 3", "Thứ 5"], desc: "2 buổi/tuần (Mặc định)" },
+              { label: "Thứ 2, 4, 6", days: ["Thứ 2", "Thứ 4", "Thứ 6"], desc: "3 buổi/tuần" },
+              { label: "Thứ 3, 5, 7", days: ["Thứ 3", "Thứ 5", "Thứ 7"], desc: "3 buổi/tuần" },
+              { label: "Cuối tuần (T7, CN)", days: ["Thứ 7", "Chủ Nhật"], desc: "2 buổi/tuần" },
+            ].map((p) => {
+              const isMatch =
+                p.days.length === selectedDays.length &&
+                p.days.every((d) => selectedDays.includes(d));
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setSelectedDays(p.days)}
+                  className={`p-2.5 rounded-xl text-left border transition ${
+                    isMatch
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                      : "bg-white text-slate-800 border-slate-200 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="block text-xs font-extrabold">{p.label}</span>
+                  <span className={`block text-[10px] ${isMatch ? "text-indigo-100" : "text-slate-400"}`}>
+                    {p.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div>
+            <span className="text-[11px] text-slate-500 font-medium block mb-1">
+              Hoặc tùy chọn từng ngày:
+            </span>
+            <div className="grid grid-cols-7 gap-1">
+              {ALL_DAYS.map((d) => {
+                const active = selectedDays.includes(d);
+                const shortName = d === "Chủ Nhật" ? "CN" : d.replace("Thứ ", "T");
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDay(d)}
+                    className={`py-2 rounded-xl text-xs font-extrabold border text-center transition ${
+                      active
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {shortName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHẾ ĐỘ 3: NHẬP TAY TỰ DO */}
+      {isCustomSchedule && (
+        <div className="space-y-1.5">
+          <input
+            className={inputCls}
+            placeholder="VD: Thứ 3, Thứ 5 (18:00 - 19:30)"
+            value={customScheduleText}
+            onChange={(e) => setCustomScheduleText(e.target.value)}
+          />
+          <p className="text-[10px] text-slate-400">
+            Hệ thống sẽ tự nhận diện các thứ trong văn bản bạn nhập (VD: Thứ 2, Thứ 4, Thứ 6).
+          </p>
+        </div>
+      )}
+
+      {/* KHUNG GIỜ HỌC */}
+      <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700">Khung giờ ca học:</span>
+          <span className="text-[10px] text-indigo-600 font-bold">
+            {startTime} – {endTime}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <span className="text-[10px] text-slate-400 block mb-0.5">Bắt đầu:</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
+            />
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 block mb-0.5">Kết thúc:</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
+            />
+          </div>
+        </div>
+
+        {/* CÁC GỢI Ý KHUNG GIỜ */}
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: "17:30 - 19:00", s: "17:30", e: "19:00" },
+            { label: "18:00 - 19:30", s: "18:00", e: "19:30" },
+            { label: "19:30 - 21:00", s: "19:30", e: "21:00" },
+            { label: "08:00 - 09:30", s: "08:00", e: "09:30" },
+          ].map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              onClick={() => {
+                setStartTime(t.s);
+                setEndTime(t.e);
+              }}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition ${
+                startTime === t.s && endTime === t.e
+                  ? "bg-slate-800 text-white border-slate-800"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* DỰ KIẾN 8 BUỔI HỌC ẤN ĐỊNH CỐ ĐỊNH */}
+      <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200/80 space-y-2">
+        <div className="flex items-center justify-between text-xs font-extrabold text-indigo-900">
+          <span className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+            Dự kiến dải {sessionCount} buổi học cố định:
+          </span>
+          <span className="text-[10px] text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md font-bold">
+            ✓ Điểm danh 1 chạm
+          </span>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5">
+          {previewSessions.slice(0, sessionCount).map((ps) => (
+            <div
+              key={ps.index}
+              className="p-1.5 bg-white rounded-xl border border-indigo-200/80 text-center shadow-xs"
+            >
+              <span className="text-[10px] font-bold text-slate-400 block">Buổi {ps.index}</span>
+              <span className="text-xs font-black text-indigo-950 block">
+                {ps.shortDay} · {ps.dateStr.slice(8, 10)}/{ps.dateStr.slice(5, 7)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-2 bg-white/80 rounded-xl border border-indigo-100 text-xs flex items-center justify-between">
+          <span className="text-slate-500 font-medium">Lịch lớp hoàn chỉnh:</span>
+          <strong className="text-indigo-700 font-extrabold">
+            {isCustomSchedule ? customScheduleText : generatedSchedule}
+          </strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL THÊM LỚP HỌC MỚI (ADD CLASS MODAL)                                  */
+/* ========================================================================= */
 function AddClassModal({
   onClose,
   onDone,
@@ -4739,17 +5245,7 @@ function AddClassModal({
   const [fee, setFee] = useState(1000000);
   const [pricePerSession, setPricePerSession] = useState(125000);
   const [err, setErr] = useState("");
-
-  const ALL_DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
-
-  const toggleDay = (day: string) => {
-    if (selectedDays.includes(day)) {
-      if (selectedDays.length === 1) return;
-      setSelectedDays(selectedDays.filter((d) => d !== day));
-    } else {
-      setSelectedDays([...selectedDays, day]);
-    }
-  };
+  const [loading, setLoading] = useState(false);
 
   const generatedSchedule =
     selectedDays.length > 0
@@ -4762,16 +5258,10 @@ function AddClassModal({
     ? parseScheduleDays(customScheduleText)
     : parseScheduleDays(selectedDays.join(", "));
 
-  const previewSessions = generateFixedSessions(
-    startDate,
-    targetDaysNum,
-    type === "MONTHLY" ? 8 : 12,
-    startTime
-  );
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
+    setLoading(true);
     try {
       await api("/api/classes", {
         method: "POST",
@@ -4788,13 +5278,21 @@ function AddClassModal({
       });
       onDone();
     } catch (e: any) {
-      setErr(e.message);
+      setErr(e.message || "Lỗi tạo lớp học.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Modal title="Thêm lớp học mới" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3.5">
+      <form onSubmit={submit} className="space-y-4">
+        {err && (
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+            {err}
+          </div>
+        )}
+
         <div>
           <label className="text-xs font-bold text-slate-700 block mb-1">
             Loại hình thu phí *
@@ -4851,234 +5349,264 @@ function AddClassModal({
           />
         </div>
 
-        {/* NGÀY BẮT ĐẦU / KHAI GIẢNG */}
+        {/* BỘ CHỌN LỊCH HỌC TRỰC QUAN BẰNG LỊCH THÁNG */}
         <div>
           <label className="text-xs font-bold text-slate-700 block mb-1">
-            Ngày bắt đầu khóa / chu kỳ (Khai giảng) *
+            Lịch học & Cấu hình buổi học *
           </label>
-          <input
-            type="date"
-            className={inputCls}
-            required
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+          <InteractiveCalendarSchedulePicker
+            startDate={startDate}
+            setStartDate={setStartDate}
+            selectedDays={selectedDays}
+            setSelectedDays={setSelectedDays}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            endTime={endTime}
+            setEndTime={setEndTime}
+            isCustomSchedule={isCustomSchedule}
+            setIsCustomSchedule={setIsCustomSchedule}
+            customScheduleText={customScheduleText}
+            setCustomScheduleText={setCustomScheduleText}
+            sessionCount={type === "MONTHLY" ? 8 : 12}
           />
         </div>
 
-        {/* BỘ CHỌN LỊCH HỌC TRỰC QUAN */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800">
-              Lịch học trong tuần
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                if (!isCustomSchedule) setCustomScheduleText(generatedSchedule);
-                setIsCustomSchedule(!isCustomSchedule);
-              }}
-              className="text-[11px] font-bold text-indigo-600 hover:underline"
-            >
-              {isCustomSchedule ? "Dùng bộ chọn nhanh" : "Nhập tay tự do"}
-            </button>
-          </div>
-
-          {isCustomSchedule ? (
-            <input
-              className={inputCls}
-              placeholder="VD: Thứ 3, Thứ 5 (18:00 - 19:30)"
-              value={customScheduleText}
-              onChange={(e) => setCustomScheduleText(e.target.value)}
-            />
-          ) : (
-            <div className="space-y-2.5">
-              {/* CÁC NÚT BẤM NHANH CA HỌC PHỔ BIẾN */}
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { label: "Thứ 3, 5", days: ["Thứ 3", "Thứ 5"] },
-                  { label: "Thứ 2, 4, 6", days: ["Thứ 2", "Thứ 4", "Thứ 6"] },
-                  { label: "Thứ 3, 5, 7", days: ["Thứ 3", "Thứ 5", "Thứ 7"] },
-                  { label: "Cuối tuần (T7, CN)", days: ["Thứ 7", "Chủ Nhật"] },
-                ].map((p) => {
-                  const isMatch =
-                    p.days.length === selectedDays.length &&
-                    p.days.every((d) => selectedDays.includes(d));
-                  return (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setSelectedDays(p.days)}
-                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition ${
-                        isMatch
-                          ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* 7 NÚT CHỌN TỪNG NGÀY TRONG TUẦN */}
-              <div>
-                <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
-                  Bấm để chọn 2 ngày cố định (hoặc nhiều hơn):
-                </span>
-                <div className="grid grid-cols-7 gap-1">
-                  {ALL_DAYS.map((d) => {
-                    const active = selectedDays.includes(d);
-                    const shortName = d === "Chủ Nhật" ? "CN" : d.replace("Thứ ", "T");
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => toggleDay(d)}
-                        className={`py-2 rounded-xl text-xs font-extrabold border text-center transition ${
-                          active
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
-                        title={d}
-                      >
-                        {shortName}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* CHỌN GIỜ BẮT ĐẦU VÀ GIỜ KẾT THÚC */}
-              <div>
-                <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
-                  Khung giờ học:
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Giờ bắt đầu:</span>
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Giờ kết thúc:</span>
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-extrabold bg-white text-slate-800"
-                    />
-                  </div>
-                </div>
-
-                {/* CA GIỜ GỢI Ý */}
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {[
-                    { label: "17:30 - 19:00", s: "17:30", e: "19:00" },
-                    { label: "18:00 - 19:30", s: "18:00", e: "19:30" },
-                    { label: "19:30 - 21:00", s: "19:30", e: "21:00" },
-                    { label: "08:00 - 09:30", s: "08:00", e: "09:30" },
-                  ].map((t) => (
-                    <button
-                      key={t.label}
-                      type="button"
-                      onClick={() => {
-                        setStartTime(t.s);
-                        setEndTime(t.e);
-                      }}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition ${
-                        startTime === t.s && endTime === t.e
-                          ? "bg-slate-800 text-white border-slate-800"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* KẾT QUẢ TỰ ĐỘNG SINH */}
-              <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200/60 text-xs flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Lịch lớp:</span>
-                <strong className="text-indigo-700 font-extrabold">{generatedSchedule}</strong>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* DỰ KIẾN 8 BUỔI HỌC ẤN ĐỊNH CỐ ĐỊNH */}
-        <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200/80 space-y-2">
-          <div className="flex items-center justify-between text-xs font-extrabold text-indigo-900">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-              Ấn định sẵn 8 buổi học cố định:
-            </span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md font-bold">
-              ✓ Điểm danh 1 chạm
-            </span>
-          </div>
-
-          <div className="grid grid-cols-4 gap-1.5">
-            {previewSessions.slice(0, 8).map((ps) => (
-              <div
-                key={ps.index}
-                className="p-1.5 bg-white rounded-xl border border-indigo-200/80 text-center shadow-xs"
-              >
-                <span className="text-[10px] font-bold text-slate-400 block">Buổi {ps.index}</span>
-                <span className="text-xs font-black text-indigo-950 block">
-                  {ps.shortDay} · {ps.dateStr.slice(8, 10)}/{ps.dateStr.slice(5, 7)}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <p className="text-[10px] text-slate-500 leading-tight">
-            💡 Khi tạo lớp, hệ thống sẽ chốt cố định 8 buổi này. Đến ngày học giáo viên chỉ cần bấm chọn buổi để điểm danh, không cần chọn ngày thủ công!
-          </p>
-        </div>
-
-        <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">
-            {type === "MONTHLY" ? "Học phí 1 tháng (8 buổi)" : "Học phí trọn khóa"}
-          </label>
-          <input
-            className={inputCls}
-            type="number"
-            min={0}
-            step="any"
-            value={fee}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setFee(v);
-              if (type === "MONTHLY") setPricePerSession(Math.round(v / 8));
-            }}
-          />
-        </div>
-
-        {type === "MONTHLY" && (
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-bold text-slate-700 block mb-1">
-              Giá tính 1 buổi lẻ
+              {type === "MONTHLY" ? "Học phí 1 tháng (8 buổi)" : "Học phí trọn khóa"}
             </label>
             <input
               className={inputCls}
               type="number"
               min={0}
               step="any"
-              value={pricePerSession}
-              onChange={(e) => setPricePerSession(Number(e.target.value))}
+              value={fee}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setFee(v);
+                if (type === "MONTHLY") setPricePerSession(Math.round(v / 8));
+              }}
             />
+          </div>
+
+          {type === "MONTHLY" && (
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">
+                Giá tính 1 buổi lẻ
+              </label>
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                step="any"
+                value={pricePerSession}
+                onChange={(e) => setPricePerSession(Number(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+
+        <button
+          disabled={loading}
+          className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition disabled:opacity-50"
+        >
+          {loading ? "Đang lưu lớp học..." : "Lưu lớp học"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+/* ========================================================================= */
+/* MODAL CHỈNH SỬA THÔNG TIN & LỊCH LỚP HỌC (EDIT CLASS MODAL)               */
+/* ========================================================================= */
+function EditClassModal({
+  cls,
+  onClose,
+  onDone,
+}: {
+  cls: any;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(cls.name || "");
+  const [type, setType] = useState<ClassType>((cls.type as ClassType) || "MONTHLY");
+
+  // Parse days from existing scheduleText
+  const existingDaysNum = parseScheduleDays(cls.scheduleText || "");
+  const initialDays = existingDaysNum.map((n) => NUMBER_TO_DAY_NAME[n]).filter(Boolean);
+
+  const [selectedDays, setSelectedDays] = useState<string[]>(
+    initialDays.length > 0 ? initialDays : ["Thứ 3", "Thứ 5"]
+  );
+
+  // Parse times if available
+  const timeMatch = (cls.scheduleText || "").match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+  const [startTime, setStartTime] = useState(timeMatch ? timeMatch[1] : "18:00");
+  const [endTime, setEndTime] = useState(timeMatch ? timeMatch[2] : "19:30");
+
+  const [startDate, setStartDate] = useState(todayStr());
+  const [isCustomSchedule, setIsCustomSchedule] = useState(false);
+  const [customScheduleText, setCustomScheduleText] = useState(cls.scheduleText || "");
+
+  const [fee, setFee] = useState(cls.monthlyTuition || 1000000);
+  const [pricePerSession, setPricePerSession] = useState(
+    cls.pricePerSession || Math.round((cls.monthlyTuition || 1000000) / 8)
+  );
+
+  const [updateSessions, setUpdateSessions] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const generatedSchedule =
+    selectedDays.length > 0
+      ? `${selectedDays.join(", ")} (${startTime} - ${endTime})`
+      : "";
+
+  const finalSchedule = isCustomSchedule ? customScheduleText : generatedSchedule;
+
+  const targetDaysNum = isCustomSchedule
+    ? parseScheduleDays(customScheduleText)
+    : parseScheduleDays(selectedDays.join(", "));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      await api(`/api/classes/${cls.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          type,
+          scheduleText: finalSchedule,
+          monthlyTuition: fee,
+          pricePerSession: type === "MONTHLY" ? pricePerSession : undefined,
+          updateSessions,
+          startDate,
+          scheduleDays: targetDaysNum,
+          startTime,
+        }),
+      });
+      onDone();
+    } catch (e: any) {
+      setErr(e.message || "Lỗi cập nhật lớp học.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal title={`Chỉnh sửa lớp: ${cls.name}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        {err && (
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+            {err}
           </div>
         )}
 
-        {err && <p className="text-xs font-bold text-rose-600">{err}</p>}
-        <button className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 active:scale-95 transition">
-          Lưu lớp học
-        </button>
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">Tên lớp học *</label>
+          <input
+            className={inputCls}
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        {/* BỘ CHỌN LỊCH HỌC TRỰC QUAN BẰNG LỊCH THÁNG */}
+        <div>
+          <label className="text-xs font-bold text-slate-700 block mb-1">
+            Lịch học & Cấu hình buổi học *
+          </label>
+          <InteractiveCalendarSchedulePicker
+            startDate={startDate}
+            setStartDate={setStartDate}
+            selectedDays={selectedDays}
+            setSelectedDays={setSelectedDays}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            endTime={endTime}
+            setEndTime={setEndTime}
+            isCustomSchedule={isCustomSchedule}
+            setIsCustomSchedule={setIsCustomSchedule}
+            customScheduleText={customScheduleText}
+            setCustomScheduleText={setCustomScheduleText}
+            sessionCount={type === "MONTHLY" ? 8 : 12}
+          />
+        </div>
+
+        {/* TÙY CHỌN CẬP NHẬT LẠI BUỔI HỌC CHƯA ĐIỂM DANH */}
+        <label className="flex items-start gap-2.5 p-3 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={updateSessions}
+            onChange={(e) => setUpdateSessions(e.target.checked)}
+            className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+          />
+          <div className="text-xs">
+            <strong className="text-slate-800 block">Cập nhật lại các buổi học chưa điểm danh theo lịch mới</strong>
+            <span className="text-slate-500 text-[11px] leading-tight block mt-0.5">
+              Hệ thống sẽ bảo toàn 100% các buổi học đã điểm danh trước đó và sắp xếp lại các buổi tương lai theo lịch bạn vừa chọn.
+            </span>
+          </div>
+        </label>
+
+        {/* HỌC PHÍ */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1">
+              {type === "MONTHLY" ? "Học phí 1 tháng (8 buổi)" : "Học phí trọn khóa"}
+            </label>
+            <input
+              className={inputCls}
+              type="number"
+              min={0}
+              step="any"
+              value={fee}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setFee(v);
+                if (type === "MONTHLY") setPricePerSession(Math.round(v / 8));
+              }}
+            />
+          </div>
+
+          {type === "MONTHLY" && (
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">
+                Giá tính 1 buổi lẻ
+              </label>
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                step="any"
+                value={pricePerSession}
+                onChange={(e) => setPricePerSession(Number(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="pt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+          >
+            Hủy bỏ
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 active:scale-95 transition disabled:opacity-50"
+          >
+            {loading ? "Đang lưu..." : "Lưu thay đổi lớp học"}
+          </button>
+        </div>
       </form>
     </Modal>
   );
